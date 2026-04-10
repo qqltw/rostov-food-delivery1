@@ -1,0 +1,1245 @@
+import express from 'express';
+import { PrismaClient } from '@prisma/client';
+import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import crypto from 'crypto';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const prisma = new PrismaClient();
+
+const app = express();
+const PORT = 3000;
+
+app.use(cors());
+app.use(express.json());
+
+// Helper to check if DB is connected
+async function isDbConnected() {
+  if (!process.env.DATABASE_URL) return false;
+  try {
+    await prisma.$connect();
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+// Admin ID from Telegram
+const MAIN_ADMIN_TG_ID = 1114947252n;
+
+// API Routes
+app.get('/api/health', async (req, res) => {
+  const dbStatus = await isDbConnected();
+  res.json({ 
+    status: 'ok', 
+    database: dbStatus ? 'connected' : 'disconnected (using mock data)' 
+  });
+});
+
+// Auth / User
+app.post('/api/auth/telegram', async (req, res) => {
+  const { id, first_name, last_name, username, photo_url } = req.body;
+  
+  if (!id) return res.status(400).json({ error: 'Missing Telegram ID' });
+
+  try {
+    const tgId = BigInt(id);
+    
+    if (!(await isDbConnected())) {
+      // Mock Auth Response
+      return res.json({
+        id: 'mock-user-id',
+        telegramId: id.toString(),
+        firstName: first_name || 'Guest',
+        lastName: last_name,
+        username,
+        photoUrl: photo_url,
+        role: tgId === MAIN_ADMIN_TG_ID ? 'admin' : 'user',
+        addresses: [],
+        favorites: [],
+      });
+    }
+
+    let user = await prisma.user.findUnique({ where: { telegramId: tgId } });
+
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          telegramId: tgId,
+          firstName: first_name,
+          lastName: last_name,
+          username,
+          photoUrl: photo_url,
+          role: tgId === MAIN_ADMIN_TG_ID ? 'admin' : 'user',
+        },
+      });
+    } else {
+      // Update existing user info
+      user = await prisma.user.update({
+        where: { telegramId: tgId },
+        data: {
+          firstName: first_name,
+          lastName: last_name,
+          username,
+          photoUrl: photo_url,
+          // Ensure main admin always has admin role
+          role: tgId === MAIN_ADMIN_TG_ID ? 'admin' : user.role,
+        },
+      });
+    }
+
+    // Convert BigInt to string for JSON
+    const userResponse = {
+      ...user,
+      telegramId: user.telegramId.toString(),
+    };
+
+    res.json(userResponse);
+  } catch (error) {
+    console.error('Auth error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Products
+app.get('/api/products', async (req, res) => {
+  try {
+    if (!(await isDbConnected())) {
+      return res.json([]);
+    }
+    const products = await prisma.product.findMany({
+      where: { isAvailable: true },
+      orderBy: { sortOrder: 'asc' },
+    });
+    res.json(products);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch products' });
+  }
+});
+
+// Categories
+app.get('/api/categories', async (req, res) => {
+  try {
+    if (!(await isDbConnected())) {
+      return res.json([]);
+    }
+    const categories = await prisma.category.findMany({
+      where: { isVisible: true },
+      orderBy: { sortOrder: 'asc' },
+    });
+    res.json(categories);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch categories' });
+  }
+});
+
+// Banners
+app.get('/api/banners', async (req, res) => {
+  try {
+    if (!(await isDbConnected())) {
+      return res.json([]);
+    }
+    const banners = await prisma.banner.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: 'asc' },
+    });
+    res.json(banners);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch banners' });
+  }
+});
+
+// Orders
+app.post('/api/orders', async (req, res) => {
+  const { userId, items, totalAmount, deliveryFee, discount, address, phone, name, deliveryType, paymentType, comment } = req.body;
+
+  if (!userId || !items || !items.length || !address || !phone || !name) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  try {
+    if (!(await isDbConnected())) {
+      return res.json({
+        id: 'mock-order-' + Date.now(),
+        userId,
+        totalAmount,
+        deliveryFee,
+        discount: discount || 0,
+        address,
+        phone,
+        name,
+        deliveryType,
+        paymentType,
+        comment,
+        status: 'created',
+        createdAt: new Date().toISOString(),
+        items: items.map((item: any) => ({
+          ...item,
+          id: 'mock-item-' + Math.random()
+        }))
+      });
+    }
+
+    // Verify user exists
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return res.status(400).json({ error: 'Пользователь не найден. Перезайдите в приложение.' });
+    }
+
+    // Check which products actually exist (productId is now optional on OrderItem)
+    const productIds = items.map((item: any) => item.productId).filter(Boolean);
+    const existingProducts = productIds.length > 0
+      ? await prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true } })
+      : [];
+    const existingProductIds = new Set(existingProducts.map(p => p.id));
+
+    const order = await prisma.order.create({
+      data: {
+        userId,
+        totalAmount,
+        deliveryFee,
+        discount: discount || 0,
+        address,
+        phone,
+        name,
+        deliveryType,
+        paymentType,
+        comment,
+        status: 'created',
+        items: {
+          create: items.map((item: any) => ({
+            // Only set productId if the product actually exists in DB, else null
+            productId: item.productId && existingProductIds.has(item.productId) ? item.productId : null,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity,
+            image: item.image || '',
+          })),
+        },
+      },
+      include: { items: true },
+    });
+    res.json(order);
+  } catch (error) {
+    console.error('Order creation error:', error);
+    res.status(500).json({ error: 'Failed to create order. Please try again.' });
+  }
+});
+
+app.get('/api/orders/user/:userId', async (req, res) => {
+  try {
+    if (!(await isDbConnected())) {
+      return res.json([]);
+    }
+    const orders = await prisma.order.findMany({
+      where: { userId: req.params.userId },
+      include: { items: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(orders);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch orders' });
+  }
+});
+
+// Update Profile
+app.patch('/api/user/profile', async (req, res) => {
+  const { id, phone, addresses, favorites } = req.body;
+  
+  try {
+    if (!(await isDbConnected())) {
+      return res.json({
+        id,
+        phone,
+        addresses,
+        favorites,
+        telegramId: '123456789',
+        firstName: 'Mock',
+        role: 'user'
+      });
+    }
+    const user = await prisma.user.update({
+      where: { id },
+      data: {
+        phone: phone !== undefined ? phone : undefined,
+        addresses: addresses !== undefined ? addresses : undefined,
+        favorites: favorites !== undefined ? favorites : undefined,
+      },
+    });
+    
+    res.json({
+      ...user,
+      telegramId: user.telegramId.toString(),
+    });
+  } catch (error) {
+    console.error('Profile update error:', error);
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
+// Toggle Favorite
+app.post('/api/user/favorites/toggle', async (req, res) => {
+  const { userId, productId } = req.body;
+  
+  try {
+    if (!(await isDbConnected())) {
+      // Mock Toggle Favorite
+      // In demo mode, we just return a mock user with the updated favorites
+      // The frontend state will handle the actual persistence for the session
+      return res.json({
+        id: userId,
+        telegramId: '123456789',
+        firstName: 'Mock',
+        role: 'user',
+        addresses: [],
+        favorites: [productId], // This is a simplification, but enough for demo
+      });
+    }
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    let favorites = [...user.favorites];
+    if (favorites.includes(productId)) {
+      favorites = favorites.filter(id => id !== productId);
+    } else {
+      favorites.push(productId);
+    }
+    
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { favorites },
+    });
+    
+    res.json({
+      ...updatedUser,
+      telegramId: updatedUser.telegramId.toString(),
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to toggle favorite' });
+  }
+});
+
+// Admin API
+app.get('/api/admin/stats', async (req, res) => {
+  try {
+    if (!(await isDbConnected())) {
+      return res.json({
+        orderCount: 0,
+        revenue: 0,
+        userCount: 0,
+        productCount: 0,
+      });
+    }
+    const [orderCount, revenue, userCount, productCount] = await Promise.all([
+      prisma.order.count(),
+      prisma.order.aggregate({ _sum: { totalAmount: true } }),
+      prisma.user.count(),
+      prisma.product.count(),
+    ]);
+    res.json({
+      orderCount,
+      revenue: revenue._sum.totalAmount || 0,
+      userCount,
+      productCount,
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+});
+
+app.get('/api/admin/orders', async (req, res) => {
+  try {
+    if (!(await isDbConnected())) {
+      return res.json([]);
+    }
+    const orders = await prisma.order.findMany({
+      include: { items: true, user: true },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+    // Convert BigInt to string for JSON
+    const sanitizedOrders = orders.map(o => ({
+      ...o,
+      user: {
+        ...o.user,
+        telegramId: o.user.telegramId.toString(),
+      }
+    }));
+    res.json(sanitizedOrders);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch orders' });
+  }
+});
+
+app.patch('/api/admin/orders/:id', async (req, res) => {
+  const { status } = req.body;
+  try {
+    const order = await prisma.order.update({
+      where: { id: req.params.id },
+      data: { status },
+    });
+    res.json(order);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update order' });
+  }
+});
+
+app.get('/api/admin/users', async (req, res) => {
+  try {
+    if (!(await isDbConnected())) {
+      return res.json([]);
+    }
+    const users = await prisma.user.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+    const sanitizedUsers = users.map(u => ({
+      ...u,
+      telegramId: u.telegramId.toString(),
+    }));
+    res.json(sanitizedUsers);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+app.post('/api/admin/products', async (req, res) => {
+  try {
+    const product = await prisma.product.create({
+      data: req.body,
+    });
+    res.json(product);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create product' });
+  }
+});
+
+app.put('/api/admin/products/:id', async (req, res) => {
+  try {
+    const product = await prisma.product.update({
+      where: { id: req.params.id },
+      data: req.body,
+    });
+    res.json(product);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update product' });
+  }
+});
+
+app.delete('/api/admin/products/:id', async (req, res) => {
+  try {
+    await prisma.product.delete({
+      where: { id: req.params.id },
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete product' });
+  }
+});
+
+app.post('/api/admin/categories', async (req, res) => {
+  try {
+    const category = await prisma.category.create({
+      data: req.body,
+    });
+    res.json(category);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create category' });
+  }
+});
+
+app.put('/api/admin/categories/:id', async (req, res) => {
+  try {
+    const category = await prisma.category.update({
+      where: { id: req.params.id },
+      data: req.body,
+    });
+    res.json(category);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update category' });
+  }
+});
+
+app.delete('/api/admin/categories/:id', async (req, res) => {
+  try {
+    await prisma.category.delete({
+      where: { id: req.params.id },
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete category' });
+  }
+});
+
+// Admin Banners
+app.get('/api/admin/banners', async (req, res) => {
+  try {
+    if (!(await isDbConnected())) {
+      return res.json([]);
+    }
+    const banners = await prisma.banner.findMany({
+      orderBy: { sortOrder: 'asc' },
+    });
+    res.json(banners);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch banners' });
+  }
+});
+
+app.post('/api/admin/banners', async (req, res) => {
+  try {
+    const banner = await prisma.banner.create({
+      data: req.body,
+    });
+    res.json(banner);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create banner' });
+  }
+});
+
+app.put('/api/admin/banners/:id', async (req, res) => {
+  try {
+    const banner = await prisma.banner.update({
+      where: { id: req.params.id },
+      data: req.body,
+    });
+    res.json(banner);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update banner' });
+  }
+});
+
+app.delete('/api/admin/banners/:id', async (req, res) => {
+  try {
+    await prisma.banner.delete({
+      where: { id: req.params.id },
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete banner' });
+  }
+});
+
+// =============================================
+// YooKassa Payment Integration
+// =============================================
+const YOOKASSA_SHOP_ID = process.env.YOOKASSA_SHOP_ID || '';
+const YOOKASSA_SECRET_KEY = process.env.YOOKASSA_SECRET_KEY || '';
+const APP_URL = process.env.APP_URL || 'http://localhost:3000';
+
+async function createYookassaPayment(amount: number, orderId: string, description: string) {
+  const idempotenceKey = crypto.randomUUID();
+  const auth = Buffer.from(`${YOOKASSA_SHOP_ID}:${YOOKASSA_SECRET_KEY}`).toString('base64');
+
+  const response = await fetch('https://api.yookassa.ru/v3/payments', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Basic ${auth}`,
+      'Idempotence-Key': idempotenceKey,
+    },
+    body: JSON.stringify({
+      amount: {
+        value: amount.toFixed(2),
+        currency: 'RUB',
+      },
+      capture: true,
+      confirmation: {
+        type: 'redirect',
+        return_url: `${APP_URL}/payment/status?orderId=${orderId}`,
+      },
+      description,
+      metadata: { orderId },
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('YooKassa error:', errorText);
+    throw new Error('Failed to create YooKassa payment');
+  }
+
+  return response.json();
+}
+
+// Create payment for an order
+app.post('/api/payments/create', async (req, res) => {
+  const { orderId } = req.body;
+  if (!orderId) return res.status(400).json({ error: 'Missing orderId' });
+
+  try {
+    if (!YOOKASSA_SHOP_ID || !YOOKASSA_SECRET_KEY) {
+      return res.status(503).json({ error: 'Оплата онлайн временно недоступна. Платёжная система не настроена.' });
+    }
+
+    if (!(await isDbConnected())) {
+      return res.status(503).json({ error: 'Database not connected' });
+    }
+
+    const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true } });
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.paymentStatus === 'succeeded') return res.status(400).json({ error: 'Order already paid' });
+
+    const description = `Заказ #${order.id.slice(0, 8)} — ${order.items.length} товар(ов)`;
+    const payment = await createYookassaPayment(order.totalAmount, order.id, description);
+
+    // Save payment info to order
+    await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        paymentId: payment.id,
+        paymentStatus: payment.status,
+        paymentUrl: payment.confirmation?.confirmation_url || null,
+      },
+    });
+
+    res.json({
+      paymentId: payment.id,
+      paymentUrl: payment.confirmation?.confirmation_url,
+      status: payment.status,
+    });
+  } catch (error) {
+    console.error('Payment creation error:', error);
+    res.status(500).json({ error: 'Не удалось создать платёж' });
+  }
+});
+
+// YooKassa webhook — called by YooKassa when payment status changes
+app.post('/api/payments/webhook', async (req, res) => {
+  try {
+    const event = req.body;
+
+    if (event.event === 'payment.succeeded') {
+      const paymentId = event.object?.id;
+      const orderId = event.object?.metadata?.orderId;
+
+      if (orderId) {
+        await prisma.order.update({
+          where: { id: orderId },
+          data: {
+            paymentStatus: 'succeeded',
+            status: 'confirmed',
+          },
+        });
+      }
+    }
+
+    if (event.event === 'payment.canceled') {
+      const orderId = event.object?.metadata?.orderId;
+      if (orderId) {
+        await prisma.order.update({
+          where: { id: orderId },
+          data: {
+            paymentStatus: 'canceled',
+            status: 'cancelled',
+          },
+        });
+      }
+    }
+
+    res.json({ status: 'ok' });
+  } catch (error) {
+    console.error('Webhook error:', error);
+    res.status(500).json({ error: 'Webhook processing failed' });
+  }
+});
+
+// Check payment status (polling from frontend after redirect back)
+app.get('/api/payments/status/:orderId', async (req, res) => {
+  try {
+    if (!(await isDbConnected())) {
+      return res.json({ paymentStatus: 'unknown' });
+    }
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.orderId },
+      select: { paymentStatus: true, paymentId: true, status: true },
+    });
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+
+    // If pending, check YooKassa directly for latest status
+    if (order.paymentId && order.paymentStatus === 'pending' && YOOKASSA_SHOP_ID && YOOKASSA_SECRET_KEY) {
+      const auth = Buffer.from(`${YOOKASSA_SHOP_ID}:${YOOKASSA_SECRET_KEY}`).toString('base64');
+      const ykRes = await fetch(`https://api.yookassa.ru/v3/payments/${order.paymentId}`, {
+        headers: { 'Authorization': `Basic ${auth}` },
+      });
+      if (ykRes.ok) {
+        const payment = await ykRes.json() as any;
+        if (payment.status !== order.paymentStatus) {
+          const newStatus = payment.status === 'succeeded' ? 'confirmed' : payment.status === 'canceled' ? 'cancelled' : undefined;
+          await prisma.order.update({
+            where: { id: req.params.orderId },
+            data: {
+              paymentStatus: payment.status,
+              ...(newStatus ? { status: newStatus } : {}),
+            },
+          });
+          return res.json({ paymentStatus: payment.status, orderStatus: newStatus || order.status });
+        }
+      }
+    }
+
+    res.json({ paymentStatus: order.paymentStatus, orderStatus: order.status });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to check payment status' });
+  }
+});
+
+// =============================================
+// Yandex Delivery (Яндекс Доставка) — real courier service
+// API docs: https://yandex.ru/dev/logistics/api/
+// =============================================
+const YANDEX_DELIVERY_TOKEN = process.env.YANDEX_DELIVERY_TOKEN || '';
+const YANDEX_DELIVERY_BASE = 'https://b2b.taxi.yandex.net';
+
+// Restaurant pickup point (configured via env)
+const RESTAURANT_ADDRESS = process.env.RESTAURANT_ADDRESS || 'Ростов-на-Дону, ул. Большая Садовая, 1';
+const RESTAURANT_LAT = parseFloat(process.env.RESTAURANT_LAT || '47.2357');
+const RESTAURANT_LNG = parseFloat(process.env.RESTAURANT_LNG || '39.7015');
+const RESTAURANT_PHONE = process.env.RESTAURANT_PHONE || '+79001234567';
+const RESTAURANT_NAME = process.env.RESTAURANT_NAME || 'Ресторан';
+
+// Yandex Geocoder for resolving customer addresses to coordinates
+const YANDEX_GEOCODER_KEY = process.env.YANDEX_GEOCODER_API_KEY || '';
+
+async function geocodeAddress(address: string): Promise<{ lat: number; lng: number; fullAddress: string } | null> {
+  if (!YANDEX_GEOCODER_KEY) return null;
+
+  const query = encodeURIComponent(`Ростов-на-Дону, ${address}`);
+  const url = `https://geocode-maps.yandex.ru/1.x/?apikey=${YANDEX_GEOCODER_KEY}&geocode=${query}&format=json&results=1`;
+
+  const response = await fetch(url);
+  if (!response.ok) return null;
+
+  const data = await response.json() as any;
+  const geoObject = data?.response?.GeoObjectCollection?.featureMember?.[0]?.GeoObject;
+  if (!geoObject) return null;
+
+  const point = geoObject.Point?.pos;
+  if (!point) return null;
+
+  const [lng, lat] = point.split(' ').map(Number);
+  const fullAddress = geoObject.metaDataProperty?.GeocoderMetaData?.text || address;
+  return { lat, lng, fullAddress };
+}
+
+// Check delivery price via Yandex Delivery API (check-price)
+app.post('/api/delivery/calculate', async (req, res) => {
+  const { address } = req.body;
+  if (!address) return res.status(400).json({ error: 'Address is required' });
+
+  try {
+    // Step 1: Geocode customer address
+    const customerCoords = await geocodeAddress(address);
+
+    if (!YANDEX_DELIVERY_TOKEN) {
+      // Fallback when Yandex Delivery not configured — use flat rate
+      return res.json({
+        available: true,
+        fee: 150,
+        estimatedMinutes: null,
+        message: 'Доставка: 150₽ (Яндекс Доставка не настроена)',
+        yandexAvailable: false,
+      });
+    }
+
+    // Step 2: Call Yandex Delivery check-price
+    const dropoffLat = customerCoords?.lat || RESTAURANT_LAT;
+    const dropoffLng = customerCoords?.lng || RESTAURANT_LNG;
+
+    const checkPriceBody = {
+      items: [
+        {
+          quantity: 1,
+          size: { height: 0.3, length: 0.3, width: 0.3 },
+          weight: 3,
+        },
+      ],
+      route_points: [
+        {
+          coordinates: [RESTAURANT_LNG, RESTAURANT_LAT],
+          fullname: RESTAURANT_ADDRESS,
+        },
+        {
+          coordinates: [dropoffLng, dropoffLat],
+          fullname: customerCoords?.fullAddress || `Ростов-на-Дону, ${address}`,
+        },
+      ],
+      skip_door_to_door: false,
+    };
+
+    const ydResponse = await fetch(`${YANDEX_DELIVERY_BASE}/b2b/cargo/integration/v2/check-price`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${YANDEX_DELIVERY_TOKEN}`,
+        'Accept-Language': 'ru',
+      },
+      body: JSON.stringify(checkPriceBody),
+    });
+
+    if (!ydResponse.ok) {
+      const errText = await ydResponse.text();
+      console.error('Yandex Delivery check-price error:', ydResponse.status, errText);
+      // Fallback on error
+      return res.json({
+        available: true,
+        fee: 150,
+        estimatedMinutes: null,
+        message: 'Доставка: 150₽ (не удалось рассчитать через Яндекс)',
+        yandexAvailable: false,
+      });
+    }
+
+    const priceData = await ydResponse.json() as any;
+
+    // Find the best tariff (express or courier)
+    // priceData contains array of offers or a single price depending on API version
+    let fee = 0;
+    let estimatedMinutes: number | null = null;
+    let tariffName = '';
+
+    if (priceData.price) {
+      // Direct price response
+      fee = Math.ceil(parseFloat(priceData.price));
+      tariffName = priceData.tariff || 'express';
+    } else if (Array.isArray(priceData)) {
+      // Multiple tariff options
+      const expressTariff = priceData.find((t: any) => t.taxi_class === 'express' || t.taxi_class === 'courier');
+      const bestTariff = expressTariff || priceData[0];
+      if (bestTariff) {
+        fee = Math.ceil(parseFloat(bestTariff.price || bestTariff.final_price || '0'));
+        tariffName = bestTariff.taxi_class || 'express';
+        estimatedMinutes = bestTariff.estimated_time_of_arrival || null;
+      }
+    }
+
+    if (fee <= 0) {
+      return res.json({
+        available: false,
+        fee: 0,
+        estimatedMinutes: null,
+        message: 'Яндекс Доставка недоступна для этого адреса',
+        yandexAvailable: false,
+      });
+    }
+
+    res.json({
+      available: true,
+      fee,
+      estimatedMinutes,
+      tariff: tariffName,
+      message: `Яндекс Доставка: ${fee}₽` + (estimatedMinutes ? ` (~${estimatedMinutes} мин)` : ''),
+      yandexAvailable: true,
+    });
+  } catch (error) {
+    console.error('Delivery calculation error:', error);
+    res.json({
+      available: true,
+      fee: 150,
+      estimatedMinutes: null,
+      message: 'Доставка: 150₽',
+      yandexAvailable: false,
+    });
+  }
+});
+
+// Create actual Yandex Delivery claim (called after order is confirmed)
+app.post('/api/delivery/create-claim', async (req, res) => {
+  const { orderId } = req.body;
+  if (!orderId) return res.status(400).json({ error: 'Missing orderId' });
+
+  try {
+    if (!YANDEX_DELIVERY_TOKEN) {
+      return res.status(503).json({ error: 'Яндекс Доставка не настроена' });
+    }
+
+    if (!(await isDbConnected())) {
+      return res.status(503).json({ error: 'Database not connected' });
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true, user: true },
+    });
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.deliveryType !== 'delivery') return res.status(400).json({ error: 'Order is pickup, not delivery' });
+
+    // Geocode delivery address
+    const customerCoords = await geocodeAddress(order.address);
+    const dropoffLat = customerCoords?.lat || RESTAURANT_LAT;
+    const dropoffLng = customerCoords?.lng || RESTAURANT_LNG;
+
+    const claimBody = {
+      emergency_contact: { name: RESTAURANT_NAME, phone: RESTAURANT_PHONE },
+      items: order.items.map(item => ({
+        title: item.name,
+        quantity: item.quantity,
+        size: { height: 0.15, length: 0.15, width: 0.15 },
+        weight: 0.5,
+        cost_value: String(item.price),
+        cost_currency: 'RUB',
+      })),
+      route_points: [
+        {
+          coordinates: [RESTAURANT_LNG, RESTAURANT_LAT],
+          fullname: RESTAURANT_ADDRESS,
+          type: 'source',
+          contact: { name: RESTAURANT_NAME, phone: RESTAURANT_PHONE },
+          visit_order: 1,
+        },
+        {
+          coordinates: [dropoffLng, dropoffLat],
+          fullname: customerCoords?.fullAddress || order.address,
+          type: 'destination',
+          contact: {
+            name: order.name,
+            phone: order.phone,
+          },
+          visit_order: 2,
+        },
+      ],
+      skip_door_to_door: false,
+      comment: order.comment || '',
+      client_requirements: { taxi_class: 'express' },
+    };
+
+    const claimResponse = await fetch(
+      `${YANDEX_DELIVERY_BASE}/b2b/cargo/integration/v2/claims/create?request_id=${crypto.randomUUID()}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${YANDEX_DELIVERY_TOKEN}`,
+          'Accept-Language': 'ru',
+        },
+        body: JSON.stringify(claimBody),
+      }
+    );
+
+    if (!claimResponse.ok) {
+      const errText = await claimResponse.text();
+      console.error('Yandex Delivery claim error:', claimResponse.status, errText);
+      return res.status(500).json({ error: 'Не удалось создать заявку на доставку' });
+    }
+
+    const claim = await claimResponse.json() as any;
+
+    // Save claim ID to order
+    await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        deliveryClaimId: claim.id,
+        deliveryStatus: claim.status,
+      },
+    });
+
+    res.json({
+      claimId: claim.id,
+      status: claim.status,
+      version: claim.version,
+    });
+  } catch (error) {
+    console.error('Delivery claim creation error:', error);
+    res.status(500).json({ error: 'Failed to create delivery claim' });
+  }
+});
+
+// Check Yandex Delivery claim status
+app.get('/api/delivery/status/:orderId', async (req, res) => {
+  try {
+    if (!(await isDbConnected())) {
+      return res.json({ status: 'unknown' });
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.orderId },
+      select: { deliveryClaimId: true, deliveryStatus: true },
+    });
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (!order.deliveryClaimId) return res.json({ status: 'no_claim' });
+
+    if (!YANDEX_DELIVERY_TOKEN) {
+      return res.json({ status: order.deliveryStatus || 'unknown' });
+    }
+
+    // Fetch latest status from Yandex
+    const infoResponse = await fetch(
+      `${YANDEX_DELIVERY_BASE}/b2b/cargo/integration/v2/claims/info?claim_id=${order.deliveryClaimId}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${YANDEX_DELIVERY_TOKEN}`,
+          'Accept-Language': 'ru',
+        },
+        body: '{}',
+      }
+    );
+
+    if (!infoResponse.ok) {
+      return res.json({ status: order.deliveryStatus || 'unknown' });
+    }
+
+    const info = await infoResponse.json() as any;
+
+    // Update stored status if changed
+    if (info.status !== order.deliveryStatus) {
+      await prisma.order.update({
+        where: { id: req.params.orderId },
+        data: { deliveryStatus: info.status },
+      });
+    }
+
+    res.json({
+      status: info.status,
+      courierName: info.performer_info?.courier_name || null,
+      courierPhone: info.performer_info?.legal_phone || null,
+      eta: info.eta || null,
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to check delivery status' });
+  }
+});
+
+// Cancel Yandex Delivery claim
+app.post('/api/delivery/cancel', async (req, res) => {
+  const { orderId } = req.body;
+  try {
+    if (!YANDEX_DELIVERY_TOKEN || !(await isDbConnected())) {
+      return res.status(503).json({ error: 'Service unavailable' });
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { deliveryClaimId: true },
+    });
+    if (!order?.deliveryClaimId) return res.status(400).json({ error: 'No delivery claim' });
+
+    // First get current version
+    const infoRes = await fetch(
+      `${YANDEX_DELIVERY_BASE}/b2b/cargo/integration/v2/claims/info?claim_id=${order.deliveryClaimId}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${YANDEX_DELIVERY_TOKEN}`,
+          'Accept-Language': 'ru',
+        },
+        body: '{}',
+      }
+    );
+    const info = await infoRes.json() as any;
+
+    const cancelRes = await fetch(
+      `${YANDEX_DELIVERY_BASE}/b2b/cargo/integration/v2/claims/cancel?claim_id=${order.deliveryClaimId}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${YANDEX_DELIVERY_TOKEN}`,
+          'Accept-Language': 'ru',
+        },
+        body: JSON.stringify({
+          cancel_state: 'free',
+          version: info.version || 1,
+        }),
+      }
+    );
+
+    if (!cancelRes.ok) {
+      const errText = await cancelRes.text();
+      console.error('Cancel delivery error:', errText);
+      return res.status(500).json({ error: 'Не удалось отменить доставку' });
+    }
+
+    const cancelData = await cancelRes.json() as any;
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { deliveryStatus: cancelData.status || 'cancelled' },
+    });
+
+    res.json({ status: cancelData.status });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to cancel delivery' });
+  }
+});
+
+// Seed API (Dev only)
+app.post('/api/dev/seed', async (req, res) => {
+  try {
+    if (!(await isDbConnected())) {
+      return res.status(400).json({
+        error: 'Database not connected. Please add DATABASE_URL to your secrets to seed the real database.'
+      });
+    }
+    // Clear existing data (preserve users to avoid breaking auth/orders)
+    await prisma.orderItem.deleteMany();
+    await prisma.order.deleteMany();
+    await prisma.product.deleteMany();
+    await prisma.category.deleteMany();
+    await prisma.banner.deleteMany();
+
+    // Seed Categories
+    const categories = [
+      { name: 'Комбо', slug: 'combo', sortOrder: 1, image: 'https://cdn-icons-png.flaticon.com/512/2713/2713931.png' },
+      { name: 'Завтраки', slug: 'breakfast', sortOrder: 2, image: 'https://cdn-icons-png.flaticon.com/512/887/887359.png' },
+      { name: 'Салаты', slug: 'salads', sortOrder: 3, image: 'https://cdn-icons-png.flaticon.com/512/3768/3768493.png' },
+      { name: 'Первые блюда', slug: 'soups', sortOrder: 4, image: 'https://cdn-icons-png.flaticon.com/512/3480/3480473.png' },
+      { name: 'Вторые блюда', slug: 'main-dishes', sortOrder: 5, image: 'https://cdn-icons-png.flaticon.com/512/3480/3480488.png' },
+      { name: 'Гарниры', slug: 'side-dishes', sortOrder: 6, image: 'https://cdn-icons-png.flaticon.com/512/2362/2362361.png' },
+      { name: 'Закуски', slug: 'snacks', sortOrder: 7, image: 'https://cdn-icons-png.flaticon.com/512/2515/2515183.png' },
+      { name: 'Десерты и выпечка', slug: 'desserts', sortOrder: 8, image: 'https://cdn-icons-png.flaticon.com/512/992/992717.png' },
+      { name: 'Напитки', slug: 'drinks', sortOrder: 9, image: 'https://cdn-icons-png.flaticon.com/512/2405/2405479.png' },
+      { name: 'Вся готовая еда', slug: 'all-ready-food', sortOrder: 10, image: 'https://cdn-icons-png.flaticon.com/512/3480/3480488.png' },
+    ];
+
+    for (const cat of categories) {
+      await prisma.category.create({ data: cat });
+    }
+
+    const createdCategories = await prisma.category.findMany();
+    const mainDishesCat = createdCategories.find(c => c.slug === 'main-dishes');
+    const soupsCat = createdCategories.find(c => c.slug === 'soups');
+    const saladsCat = createdCategories.find(c => c.slug === 'salads');
+    const drinksCat = createdCategories.find(c => c.slug === 'drinks');
+
+    // Seed Products
+    const products = [
+      {
+        name: 'Котлета по-киевски с пюре',
+        slug: 'kiev-cutlet',
+        description: 'Классическая котлета по-киевски с нежным картофельным пюре.',
+        price: 450,
+        oldPrice: 550,
+        categoryId: mainDishesCat!.id,
+        images: ['https://picsum.photos/seed/main1/800/800'],
+        weight: '350г',
+        kcal: 850,
+        proteins: 35,
+        fats: 45,
+        carbs: 65,
+        tags: ['мясо', 'сытно'],
+        isPopular: true,
+        isNew: false,
+        isAvailable: true,
+        sortOrder: 1
+      },
+      {
+        name: 'Борщ с говядиной',
+        slug: 'borscht',
+        description: 'Наваристый борщ со сметаной и зеленью.',
+        price: 320,
+        categoryId: soupsCat!.id,
+        images: ['https://picsum.photos/seed/soup1/800/800'],
+        weight: '300г',
+        kcal: 420,
+        proteins: 18,
+        fats: 25,
+        carbs: 35,
+        tags: ['суп', 'хит'],
+        isPopular: true,
+        isNew: false,
+        isAvailable: true,
+        sortOrder: 1
+      },
+      {
+        name: 'Салат Цезарь с курицей',
+        slug: 'caesar-chicken',
+        description: 'Свежие листья салата, куриное филе, пармезан, сухарики и фирменный соус.',
+        price: 390,
+        categoryId: saladsCat!.id,
+        images: ['https://picsum.photos/seed/salad1/800/800'],
+        weight: '250г',
+        kcal: 350,
+        proteins: 25,
+        fats: 20,
+        carbs: 15,
+        tags: ['салат', 'легкое'],
+        isPopular: true,
+        isNew: false,
+        isAvailable: true,
+        sortOrder: 1
+      },
+      {
+        name: 'Морс Домашний',
+        slug: 'mors',
+        description: 'Освежающий морс из донских ягод.',
+        price: 150,
+        categoryId: drinksCat!.id,
+        images: ['https://picsum.photos/seed/drink1/800/800'],
+        weight: '500мл',
+        kcal: 120,
+        proteins: 0,
+        fats: 0,
+        carbs: 30,
+        tags: ['натуральное'],
+        isPopular: false,
+        isNew: false,
+        isAvailable: true,
+        sortOrder: 1
+      }
+    ];
+
+    for (const prod of products) {
+      await prisma.product.create({ data: prod });
+    }
+
+    // Seed Banners
+    const banners = [
+      {
+        title: 'Скидка 20% на первый заказ',
+        subtitle: 'Используйте промокод ROSTOV20',
+        image: 'https://picsum.photos/seed/banner1/1200/600',
+        isActive: true,
+        sortOrder: 1
+      },
+      {
+        title: 'Бесплатная доставка от 1500₽',
+        subtitle: 'По всему Ростову-на-Дону',
+        image: 'https://picsum.photos/seed/banner2/1200/600',
+        isActive: true,
+        sortOrder: 2
+      }
+    ];
+
+    for (const banner of banners) {
+      await prisma.banner.create({ data: banner });
+    }
+
+    res.json({ message: 'Database seeded successfully' });
+  } catch (error) {
+    console.error('Seed error:', error);
+    res.status(500).json({ error: 'Failed to seed database' });
+  }
+});
+
+async function startServer() {
+  // Vite middleware for development
+  if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+
+  if (!process.env.VERCEL) {
+    const port = process.env.PORT || 3000;
+    app.listen(port as number, '0.0.0.0', () => {
+      console.log(`Server running on http://localhost:${port}`);
+    });
+  }
+}
+
+startServer();
+
+export default app;

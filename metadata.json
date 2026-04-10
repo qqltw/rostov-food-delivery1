@@ -1,0 +1,7 @@
+{
+  "name": "Rostov Food Delivery",
+  "description": "Premium Telegram Mini App for local food delivery in Rostov-on-Don.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

@@ -1,0 +1,6 @@
+node_modules
+src
+prisma
+*.md
+tsconfig.json
+vite.config.ts

@@ -1,0 +1,118 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  telegramId  BigInt   @unique
+  firstName   String
+  lastName    String?
+  username    String?
+  photoUrl    String?
+  phone       String?
+  role        String   @default("user")
+  addresses   Json     @default("[]")
+  favorites   String[] @default([])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  orders      Order[]
+}
+
+model Category {
+  id        String    @id @default(uuid())
+  name      String
+  slug      String    @unique
+  image     String
+  sortOrder Int       @default(0)
+  isVisible Boolean   @default(true)
+  products  Product[]
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String
+  price       Float
+  oldPrice    Float?
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id])
+  images      String[]
+  weight      String
+  kcal        Int
+  proteins    Int
+  fats        Int
+  carbs       Int
+  tags        String[]
+  isPopular   Boolean  @default(false)
+  isNew       Boolean  @default(false)
+  isAvailable Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  orderItems  OrderItem[]
+}
+
+model Order {
+  id              String      @id @default(uuid())
+  userId          String
+  user            User        @relation(fields: [userId], references: [id])
+  totalAmount     Float
+  deliveryFee     Float
+  discount        Float       @default(0)
+  promoCode       String?
+  status          String      @default("created")
+  address         String
+  phone           String
+  name            String
+  comment         String?
+  deliveryType    String
+  paymentType     String
+  paymentId       String?
+  paymentStatus   String?
+  paymentUrl      String?
+  deliveryClaimId String?
+  deliveryStatus  String?
+  deliveryFeeYandex Float?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  items           OrderItem[]
+}
+
+model OrderItem {
+  id        String   @id @default(uuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  name      String
+  price     Float
+  quantity  Int
+  image     String
+}
+
+model Banner {
+  id        String  @id @default(uuid())
+  title     String
+  subtitle  String?
+  image     String
+  link      String?
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+}
+
+model PromoCode {
+  id             String    @id @default(uuid())
+  code           String    @unique
+  discountType   String
+  value          Float
+  minOrderAmount Float     @default(0)
+  isActive       Boolean   @default(true)
+  expiryDate     DateTime?
+}
