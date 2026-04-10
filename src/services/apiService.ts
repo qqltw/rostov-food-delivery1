@@ -68,7 +68,10 @@ export const apiService = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(tgData),
     });
-    if (!res.ok) throw new Error('Failed to login with Telegram');
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`Auth failed (${res.status}): ${errText.slice(0, 200)}`);
+    }
     return res.json();
   },
 
