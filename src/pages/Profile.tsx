@@ -10,6 +10,7 @@ import { ru } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
 import { ProductCard } from '../components/ProductCard';
 import { ProductDetailModal } from '../components/ProductDetailModal';
+import { OrderDetailsModal } from '../components/OrderDetailsModal';
 
 export const ProfilePage: React.FC = () => {
   const { user, isAdmin, setUser } = useAuth();
@@ -19,6 +20,7 @@ export const ProfilePage: React.FC = () => {
   const [activeModal, setActiveModal] = useState<'addresses' | 'settings' | 'favorites' | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   // Address form state
   const [addressForm, setAddressForm] = useState<Address>({
@@ -168,8 +170,12 @@ export const ProfilePage: React.FC = () => {
         ) : orders.length > 0 ? (
           <div className="flex flex-col gap-4">
             {orders.map((order) => (
-              <div key={order.id} className="bg-white dark:bg-zinc-900 p-5 rounded-[32px] border border-zinc-100 dark:border-zinc-800 flex flex-col gap-4">
-                <div className="flex items-center justify-between">
+              <button
+                key={order.id}
+                onClick={() => setSelectedOrder(order)}
+                className="bg-white dark:bg-zinc-900 p-5 rounded-[32px] border border-zinc-100 dark:border-zinc-800 flex flex-col gap-4 text-left active:scale-[0.98] transition-transform"
+              >
+                <div className="flex items-center justify-between w-full">
                   <div className="flex flex-col">
                     <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">
                       {format(new Date(order.createdAt), 'd MMMM, HH:mm', { locale: ru })}
@@ -183,8 +189,8 @@ export const ProfilePage: React.FC = () => {
                     {ORDER_STATUS_LABELS[order.status as keyof typeof ORDER_STATUS_LABELS]}
                   </div>
                 </div>
-                
-                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+
+                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar w-full">
                   {order.items.map((item, idx) => (
                     <div key={idx} className="w-10 h-10 rounded-xl overflow-hidden bg-zinc-50 dark:bg-zinc-800 flex-shrink-0">
                       <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
@@ -192,13 +198,13 @@ export const ProfilePage: React.FC = () => {
                   ))}
                 </div>
 
-                <div className="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                <div className="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800 w-full">
                   <span className="text-sm font-black text-zinc-900 dark:text-zinc-100">{formatPrice(order.totalAmount)}</span>
-                  <button className="text-orange-500 text-xs font-bold flex items-center gap-1">
+                  <span className="text-orange-500 text-xs font-bold flex items-center gap-1">
                     Детали <ChevronRight size={14} />
-                  </button>
+                  </span>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         ) : (
@@ -466,12 +472,18 @@ export const ProfilePage: React.FC = () => {
         )}
       </AnimatePresence>
 
-      <ProductDetailModal 
+      <ProductDetailModal
         product={selectedProduct}
         isOpen={!!selectedProduct}
         onClose={() => setSelectedProduct(null)}
         isFavorite={selectedProduct ? userFavorites.includes(selectedProduct.id) : false}
         onFavoriteToggle={() => selectedProduct && handleToggleFavorite(selectedProduct.id)}
+      />
+
+      <OrderDetailsModal
+        isOpen={!!selectedOrder}
+        onClose={() => setSelectedOrder(null)}
+        order={selectedOrder}
       />
     </div>
   );

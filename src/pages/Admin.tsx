@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Package, ShoppingBag, Users, Plus, Edit2, Trash2, FolderTree, Image, Database } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingBag, Users, Plus, Edit2, Trash2, FolderTree, Image, Database, ChevronRight, CreditCard, Banknote, Wallet } from 'lucide-react';
 import { apiService } from '../services/apiService';
 import { Product, Order, Category, User, Banner } from '../types';
 import { formatPrice, cn } from '../lib/utils';
@@ -8,6 +8,7 @@ import { Button } from '../components/Button';
 import { ProductModal } from '../components/admin/ProductModal';
 import { CategoryModal } from '../components/admin/CategoryModal';
 import { BannerModal } from '../components/admin/BannerModal';
+import { OrderDetailsModal } from '../components/OrderDetailsModal';
 
 type AdminTab = 'dashboard' | 'products' | 'categories' | 'orders' | 'users' | 'banners';
 
@@ -29,6 +30,7 @@ export const AdminPage: React.FC = () => {
   const [isBannerModalOpen, setIsBannerModalOpen] = useState(false);
   const [editingBanner, setEditingBanner] = useState<Banner | null>(null);
   const [isSeeding, setIsSeeding] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -382,37 +384,72 @@ export const AdminPage: React.FC = () => {
             </div>
           ) : (
             <div className="flex flex-col gap-4">
-              {orders.map(order => (
-                <div key={order.id} className="bg-white dark:bg-zinc-900 p-6 rounded-[32px] border border-zinc-100 dark:border-zinc-800 flex flex-col gap-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex flex-col">
-                      <span className="text-sm font-black text-zinc-900 dark:text-zinc-100">#{order.id.slice(-6)}</span>
-                      <span className="text-xs text-zinc-400 font-medium">{order.name}, {order.phone}</span>
+              {orders.map(order => {
+                const PayIcon = order.paymentType === 'cash' ? Banknote : order.paymentType === 'card' ? Wallet : CreditCard;
+                const isPaid = order.paymentStatus === 'succeeded';
+                return (
+                  <div key={order.id} className="bg-white dark:bg-zinc-900 p-6 rounded-[32px] border border-zinc-100 dark:border-zinc-800 flex flex-col gap-4">
+                    <div className="flex items-center justify-between">
+                      <button
+                        onClick={() => setSelectedOrder(order)}
+                        className="flex flex-col text-left active:opacity-70 transition-opacity"
+                      >
+                        <span className="text-sm font-black text-zinc-900 dark:text-zinc-100 flex items-center gap-1">
+                          #{order.id.slice(-6)} <ChevronRight size={14} className="text-zinc-400" />
+                        </span>
+                        <span className="text-xs text-zinc-400 font-medium">{order.name}, {order.phone}</span>
+                      </button>
+                      <select
+                        value={order.status}
+                        onChange={(e) => updateOrderStatus(order.id, e.target.value as any)}
+                        className={cn(
+                          "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase text-white border-none outline-none cursor-pointer",
+                          ORDER_STATUS_COLORS[order.status]
+                        )}
+                      >
+                        {Object.entries(ORDER_STATUS_LABELS).map(([val, label]) => (
+                          <option key={val} value={val} className="bg-white text-zinc-900">{label}</option>
+                        ))}
+                      </select>
                     </div>
-                    <select
-                      value={order.status}
-                      onChange={(e) => updateOrderStatus(order.id, e.target.value as any)}
-                      className={cn(
-                        "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase text-white border-none outline-none cursor-pointer",
-                        ORDER_STATUS_COLORS[order.status]
-                      )}
+
+                    {/* Address + payment quick view */}
+                    <button
+                      onClick={() => setSelectedOrder(order)}
+                      className="flex flex-col gap-2 text-left bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl p-3 active:opacity-70 transition-opacity"
                     >
-                      {Object.entries(ORDER_STATUS_LABELS).map(([val, label]) => (
-                        <option key={val} value={val} className="bg-white text-zinc-900">{label}</option>
-                      ))}
-                    </select>
+                      <div className="flex items-start gap-2 text-xs text-zinc-600 dark:text-zinc-300">
+                        <span className="text-zinc-400 font-bold">{order.deliveryType === 'delivery' ? '🚚' : '🏪'}</span>
+                        <span className="line-clamp-2">{order.address}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <PayIcon size={12} className="text-zinc-400" />
+                        <span className="text-zinc-600 dark:text-zinc-300 font-medium">
+                          {order.paymentType === 'cash' ? 'Наличные' : order.paymentType === 'card' ? 'Карта курьеру' : 'Онлайн'}
+                        </span>
+                        {order.paymentType === 'online' && (
+                          <span className={cn(
+                            'text-[10px] font-black uppercase px-2 py-0.5 rounded-full',
+                            isPaid ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-500'
+                          )}>
+                            {isPaid ? 'Оплачено' : (order.paymentStatus || 'Не оплачено')}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                      <span className="text-sm font-black text-zinc-900 dark:text-zinc-100">{formatPrice(order.totalAmount)}</span>
+                      <button
+                        onClick={() => setSelectedOrder(order)}
+                        className="text-orange-500 text-xs font-bold flex items-center gap-1"
+                      >
+                        Подробнее <ChevronRight size={14} />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex flex-col gap-1">
-                    {order.items.map((item, i) => (
-                      <span key={i} className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">{item.name} x{item.quantity}</span>
-                    ))}
-                  </div>
-                  <div className="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800">
-                    <span className="text-sm font-black text-zinc-900 dark:text-zinc-100">{formatPrice(order.totalAmount)}</span>
-                    <span className="text-[10px] font-bold text-zinc-400 uppercase">{order.deliveryType === 'delivery' ? 'Доставка' : 'Самовывоз'}</span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -482,6 +519,12 @@ export const AdminPage: React.FC = () => {
         onClose={() => { setIsBannerModalOpen(false); setEditingBanner(null); }}
         onSave={handleSaveBanner}
         banner={editingBanner}
+      />
+
+      <OrderDetailsModal
+        isOpen={!!selectedOrder}
+        onClose={() => setSelectedOrder(null)}
+        order={selectedOrder}
       />
     </div>
   );
