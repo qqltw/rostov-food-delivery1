@@ -5,16 +5,47 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Global safety nets — so serverless functions return readable errors
+// instead of FUNCTION_INVOCATION_FAILED.
+process.on('unhandledRejection', (reason) => {
+  console.error('UNHANDLED REJECTION:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION:', err);
+});
 
-const prisma = new PrismaClient();
+let __filename = '';
+let __dirname = process.cwd();
+try {
+  __filename = fileURLToPath(import.meta.url);
+  __dirname = path.dirname(__filename);
+} catch {
+  // import.meta.url not available — stay with process.cwd()
+}
+
+// Lazy Prisma client — instantiation is deferred until first use so that
+// import-time errors (missing DATABASE_URL, missing binary) don't crash the whole module.
+let _prisma: PrismaClient | null = null;
+const prisma: PrismaClient = new Proxy({} as PrismaClient, {
+  get(_target, prop: string | symbol) {
+    if (!_prisma) {
+      _prisma = new PrismaClient();
+    }
+    return (_prisma as any)[prop];
+  },
+});
 
 const app = express();
 const PORT = 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// Request logger — helps find crashing routes in Vercel logs
+app.use((req, _res, next) => {
+  console.log(`${req.method} ${req.path}`);
+  next();
+});
 
 // Helper to check if DB is connected
 async function isDbConnected() {
@@ -41,29 +72,39 @@ app.get('/api/health', async (req, res) => {
 
 // Auth / User
 app.post('/api/auth/telegram', async (req, res) => {
-  const { id, first_name, last_name, username, photo_url } = req.body;
-  
-  if (!id) return res.status(400).json({ error: 'Missing Telegram ID' });
-
   try {
+    const { id, first_name, last_name, username, photo_url } = req.body || {};
+
+    if (!id) return res.status(400).json({ error: 'Missing Telegram ID' });
+
     const tgId = BigInt(id);
-    
-    if (!(await isDbConnected())) {
-      // Mock Auth Response
+
+    // Fallback: if no DATABASE_URL at all, return a mock user so the UI still works
+    if (!process.env.DATABASE_URL) {
       return res.json({
-        id: 'mock-user-id',
-        telegramId: id.toString(),
+        id: 'mock-' + id,
+        telegramId: String(id),
         firstName: first_name || 'Guest',
-        lastName: last_name,
-        username,
-        photoUrl: photo_url,
+        lastName: last_name || null,
+        username: username || null,
+        photoUrl: photo_url || null,
+        phone: null,
         role: tgId === MAIN_ADMIN_TG_ID ? 'admin' : 'user',
         addresses: [],
         favorites: [],
       });
     }
 
-    let user = await prisma.user.findUnique({ where: { telegramId: tgId } });
+    let user;
+    try {
+      user = await prisma.user.findUnique({ where: { telegramId: tgId } });
+    } catch (dbErr: any) {
+      console.error('DB connection/query failed:', dbErr);
+      return res.status(500).json({
+        error: 'Database error',
+        message: dbErr?.message || String(dbErr),
+      });
+    }
 
     if (!user) {
       user = await prisma.user.create({
@@ -77,7 +118,6 @@ app.post('/api/auth/telegram', async (req, res) => {
         },
       });
     } else {
-      // Update existing user info
       user = await prisma.user.update({
         where: { telegramId: tgId },
         data: {
@@ -85,22 +125,21 @@ app.post('/api/auth/telegram', async (req, res) => {
           lastName: last_name,
           username,
           photoUrl: photo_url,
-          // Ensure main admin always has admin role
           role: tgId === MAIN_ADMIN_TG_ID ? 'admin' : user.role,
         },
       });
     }
 
-    // Convert BigInt to string for JSON
-    const userResponse = {
+    res.json({
       ...user,
       telegramId: user.telegramId.toString(),
-    };
-
-    res.json(userResponse);
-  } catch (error) {
+    });
+  } catch (error: any) {
     console.error('Auth error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({
+      error: 'Auth failed',
+      message: error?.message || String(error),
+    });
   }
 });
 
@@ -1217,13 +1256,15 @@ app.post('/api/dev/seed', async (req, res) => {
 
 async function startServer() {
   // On Vercel, static files are served separately via vercel.json rewrites —
-  // the serverless function only handles /api/* routes.
+  // the serverless function only handles /api/* routes. Skip entirely.
   if (process.env.VERCEL) return;
 
   // Local dev / production: serve the Vite app
   if (process.env.NODE_ENV !== 'production') {
-    const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
+    // Hide import from bundlers (Vercel/esbuild) so Vite isn't bundled into the serverless function
+    const viteModuleName = 'vite';
+    const viteMod: any = await import(/* @vite-ignore */ viteModuleName);
+    const vite = await viteMod.createServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
@@ -1242,6 +1283,23 @@ async function startServer() {
   });
 }
 
-startServer();
+// Global error handler — MUST be last. Returns JSON error instead of
+// letting the Vercel function crash with FUNCTION_INVOCATION_FAILED.
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('EXPRESS ERROR HANDLER:', err);
+  res.status(500).json({
+    error: 'Internal server error',
+    message: err?.message || String(err),
+    stack: process.env.NODE_ENV !== 'production' ? err?.stack : undefined,
+  });
+});
+
+// Only start the local/HTTP server when NOT on Vercel.
+// On Vercel, api/index.ts imports `app` directly and Vercel handles the HTTP layer.
+if (!process.env.VERCEL) {
+  startServer().catch((err) => {
+    console.error('Server startup error:', err);
+  });
+}
 
 export default app;
