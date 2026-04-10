@@ -1216,7 +1216,11 @@ app.post('/api/dev/seed', async (req, res) => {
 });
 
 async function startServer() {
-  // Vite middleware for development
+  // On Vercel, static files are served separately via vercel.json rewrites —
+  // the serverless function only handles /api/* routes.
+  if (process.env.VERCEL) return;
+
+  // Local dev / production: serve the Vite app
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
@@ -1232,12 +1236,10 @@ async function startServer() {
     });
   }
 
-  if (!process.env.VERCEL) {
-    const port = process.env.PORT || 3000;
-    app.listen(port as number, '0.0.0.0', () => {
-      console.log(`Server running on http://localhost:${port}`);
-    });
-  }
+  const port = process.env.PORT || 3000;
+  app.listen(port as number, '0.0.0.0', () => {
+    console.log(`Server running on http://localhost:${port}`);
+  });
 }
 
 startServer();
