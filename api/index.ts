@@ -1,5 +1,5 @@
 // Vercel serverless entry point.
-// Static import so esbuild bundles server.ts into the function.
-import app from '../server';
+// Must use .js extension for Node ESM resolution on Vercel.
+import app from '../server.js';
 
 export default app;
