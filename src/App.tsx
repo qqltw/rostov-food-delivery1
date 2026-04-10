@@ -11,7 +11,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 const queryClient = new QueryClient();
 
 export default function App() {
-  const { init, isLoading, isAdmin } = useAuth();
+  const { init, isLoading, isAdmin, user, authError, debugInfo } = useAuth();
   const [activeTab, setActiveTab] = useState('home');
 
   useEffect(() => {
@@ -31,6 +31,26 @@ export default function App() {
           <span className="text-sm font-bold text-zinc-400 uppercase tracking-widest animate-pulse">
             Загрузка Ростова...
           </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user && authError) {
+    return (
+      <div className="min-h-screen bg-white dark:bg-zinc-950 flex items-center justify-center p-6">
+        <div className="max-w-md w-full flex flex-col gap-4">
+          <h1 className="text-2xl font-black text-red-500">Ошибка авторизации</h1>
+          <p className="text-sm text-zinc-700 dark:text-zinc-300">{authError}</p>
+          <pre className="text-[10px] bg-zinc-100 dark:bg-zinc-900 p-3 rounded-xl whitespace-pre-wrap text-zinc-700 dark:text-zinc-300 overflow-auto">
+            {debugInfo}
+          </pre>
+          <button
+            onClick={() => init()}
+            className="bg-orange-500 text-white font-bold py-3 rounded-2xl"
+          >
+            Повторить
+          </button>
         </div>
       </div>
     );
