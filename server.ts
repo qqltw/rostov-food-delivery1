@@ -519,12 +519,20 @@ app.get('/api/admin/orders', async (req, res) => {
     const orders = await prisma.order.findMany({
       include: { items: true, user: true },
       orderBy: { createdAt: 'desc' },
-      take: 50,
+      take: 100,
     });
+    // Получаем имена курьеров
+    const courierIds = [...new Set(orders.map(o => o.courierId).filter(Boolean))] as string[];
+    const couriers = courierIds.length > 0
+      ? await prisma.user.findMany({ where: { id: { in: courierIds } }, select: { id: true, firstName: true, lastName: true } })
+      : [];
+    const courierMap = Object.fromEntries(couriers.map(c => [c.id, `${c.firstName}${c.lastName ? ' ' + c.lastName : ''}`]));
+
     // Convert BigInt to string for JSON
     const sanitizedOrders = orders.map(o => ({
       ...o,
       user: serializeUser(o.user),
+      courierName: o.courierId ? courierMap[o.courierId] || null : null,
     }));
     res.json(sanitizedOrders);
   } catch (error) {
@@ -538,10 +546,51 @@ app.patch('/api/admin/orders/:id', async (req, res) => {
     const order = await prisma.order.update({
       where: { id: req.params.id },
       data: { status },
+      include: { items: true },
     });
     res.json(order);
   } catch (error) {
     res.status(500).json({ error: 'Failed to update order' });
+  }
+});
+
+// Назначить курьера на заказ
+app.patch('/api/admin/orders/:id/courier', async (req, res) => {
+  const { courierId } = req.body;
+  try {
+    const order = await prisma.order.update({
+      where: { id: req.params.id },
+      data: { courierId: courierId || null },
+      include: { items: true },
+    });
+    res.json(order);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to assign courier' });
+  }
+});
+
+// Заказы конкретного курьера (только delivering + delivered)
+app.get('/api/courier/orders/:courierId', async (req, res) => {
+  try {
+    if (!(await isDbConnected())) {
+      return res.json([]);
+    }
+    const orders = await prisma.order.findMany({
+      where: {
+        courierId: req.params.courierId,
+        status: { in: ['delivering', 'delivered'] },
+      },
+      include: { items: true, user: true },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+    const sanitizedOrders = orders.map(o => ({
+      ...o,
+      user: serializeUser(o.user),
+    }));
+    res.json(sanitizedOrders);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch courier orders' });
   }
 });
 

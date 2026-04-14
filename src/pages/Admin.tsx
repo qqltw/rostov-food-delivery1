@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Package, ShoppingBag, Users, Plus, Edit2, Trash2, FolderTree, Image, Database, ChevronRight, CreditCard, Banknote, Wallet, MapPin } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { LayoutDashboard, Package, ShoppingBag, Users, Plus, Edit2, Trash2, FolderTree, Image, Database, ChevronRight, CreditCard, Banknote, Wallet, MapPin, Truck, Check } from 'lucide-react';
 import { apiService } from '../services/apiService';
 import { Product, Order, Category, User, Banner, ROLE_LABELS, UserRole, ADMIN_ROLES } from '../types';
 import { formatPrice, cn } from '../lib/utils';
@@ -12,6 +12,28 @@ import { OrderDetailsModal } from '../components/OrderDetailsModal';
 import { useAuth } from '../hooks/useAuth';
 
 type AdminTab = 'dashboard' | 'products' | 'categories' | 'orders' | 'users' | 'banners';
+
+// Группировка заказов по дням
+function groupOrdersByDate(orders: Order[]): { date: string; label: string; orders: Order[]; deliveredCount: number }[] {
+  const groups: Record<string, Order[]> = {};
+  for (const order of orders) {
+    const d = new Date(order.createdAt);
+    const key = d.toISOString().slice(0, 10); // YYYY-MM-DD
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(order);
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+
+  return Object.entries(groups)
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([date, orders]) => ({
+      date,
+      label: date === today ? 'Сегодня' : date === yesterday ? 'Вчера' : new Date(date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }),
+      orders,
+      deliveredCount: orders.filter(o => o.status === 'delivered').length,
+    }));
+}
 
 export const AdminPage: React.FC = () => {
   const { user: currentUser, canManageRoles } = useAuth();
@@ -35,23 +57,32 @@ export const AdminPage: React.FC = () => {
   const [isSeeding, setIsSeeding] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
+  // Список курьеров для назначения
+  const couriers = useMemo(() => users.filter(u => u.role === 'courier'), [users]);
+
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [p, c, o, u, s, b] = await Promise.all([
-        apiService.getProducts().catch(() => []),
-        apiService.getCategories().catch(() => []),
-        apiService.getAdminOrders().catch(() => []),
-        apiService.getAdminUsers().catch(() => []),
-        apiService.getAdminStats().catch(() => ({ orderCount: 0, revenue: 0, userCount: 0, productCount: 0 })),
-        apiService.getAdminBanners().catch(() => []),
-      ]);
-      setProducts(p);
-      setCategories(c);
-      setOrders(o);
-      setUsers(u);
-      setStats(s);
-      setBanners(b);
+      if (isCourier && currentUser) {
+        // Курьер — загружаем только свои заказы
+        const o = await apiService.getCourierOrders(currentUser.id).catch(() => []);
+        setOrders(o);
+      } else {
+        const [p, c, o, u, s, b] = await Promise.all([
+          apiService.getProducts().catch(() => []),
+          apiService.getCategories().catch(() => []),
+          apiService.getAdminOrders().catch(() => []),
+          apiService.getAdminUsers().catch(() => []),
+          apiService.getAdminStats().catch(() => ({ orderCount: 0, revenue: 0, userCount: 0, productCount: 0 })),
+          apiService.getAdminBanners().catch(() => []),
+        ]);
+        setProducts(p);
+        setCategories(c);
+        setOrders(o);
+        setUsers(u);
+        setStats(s);
+        setBanners(b);
+      }
     } catch (error) {
       console.error('Failed to fetch admin data:', error);
     } finally {
@@ -66,9 +97,23 @@ export const AdminPage: React.FC = () => {
   const updateOrderStatus = async (orderId: string, status: Order['status']) => {
     try {
       await apiService.updateOrderStatus(orderId, status);
-      setOrders(orders.map(o => o.id === orderId ? { ...o, status } : o));
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
     } catch (error) {
       console.error('Failed to update order status:', error);
+    }
+  };
+
+  const assignCourier = async (orderId: string, courierId: string | null) => {
+    try {
+      await apiService.assignCourier(orderId, courierId);
+      const courierUser = courierId ? couriers.find(c => c.id === courierId) : null;
+      setOrders(prev => prev.map(o => o.id === orderId ? {
+        ...o,
+        courierId,
+        courierName: courierUser ? `${courierUser.firstName}${courierUser.lastName ? ' ' + courierUser.lastName : ''}` : undefined
+      } : o));
+    } catch (error) {
+      console.error('Failed to assign courier:', error);
     }
   };
 
@@ -162,7 +207,10 @@ export const AdminPage: React.FC = () => {
     }
   };
 
-  if (isLoading) return <div className="p-8 animate-pulse text-zinc-900 dark:text-zinc-100">Загрузка админки...</div>;
+  // Группировка заказов по дням
+  const orderGroups = useMemo(() => groupOrdersByDate(orders), [orders]);
+
+  if (isLoading) return <div className="p-8 animate-pulse text-zinc-900 dark:text-zinc-100">Загрузка...</div>;
 
   const allTabs: { id: AdminTab; label: string; icon: any }[] = [
     { id: 'dashboard', label: 'Дашборд', icon: LayoutDashboard },
@@ -176,12 +224,148 @@ export const AdminPage: React.FC = () => {
   // Курьер видит только заказы
   const tabs = isCourier ? allTabs.filter(t => t.id === 'orders') : allTabs;
 
+  // Рендер карточки заказа
+  const renderOrderCard = (order: Order) => {
+    const PayIcon = order.paymentType === 'cash' ? Banknote : order.paymentType === 'card' ? Wallet : CreditCard;
+    const isPaid = order.paymentStatus === 'succeeded';
+    // Парсим адрес
+    const addressParts = order.address.split(',').map((s: string) => s.trim());
+    const mainAddress = addressParts.slice(0, 3).join(', ');
+    const extraInfo = addressParts.slice(3).join(', ');
+    // Для навигации
+    const navParts = addressParts.slice(0, 3).map(p => p.replace(/^д\.\s*/, '').replace(/^ул\.\s*/, ''));
+    const navAddress = navParts.join(', ');
+    const openNav = (e: React.MouseEvent) => {
+      e.preventDefault();
+      window.location.href = 'https://yandex.ru/maps/?text=' + encodeURIComponent(navAddress);
+    };
+
+    return (
+      <div key={order.id} className="bg-white dark:bg-zinc-900 p-6 rounded-[32px] border border-zinc-100 dark:border-zinc-800 flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setSelectedOrder(order)}
+            className="flex flex-col text-left active:opacity-70 transition-opacity"
+          >
+            <span className="text-sm font-black text-zinc-900 dark:text-zinc-100 flex items-center gap-1">
+              #{order.id.slice(-6)} <ChevronRight size={14} className="text-zinc-400" />
+            </span>
+            <span className="text-xs text-zinc-400 font-medium">{order.name}, {order.phone}</span>
+          </button>
+          {isCourier ? (
+            // Курьер может менять только delivering -> delivered
+            order.status === 'delivering' ? (
+              <button
+                onClick={() => updateOrderStatus(order.id, 'delivered')}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase text-white bg-green-500 active:bg-green-600 transition-colors"
+              >
+                <Check size={12} />
+                Доставлен
+              </button>
+            ) : (
+              <span className={cn(
+                "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase text-white",
+                ORDER_STATUS_COLORS[order.status]
+              )}>
+                {ORDER_STATUS_LABELS[order.status as keyof typeof ORDER_STATUS_LABELS]}
+              </span>
+            )
+          ) : (
+            <select
+              value={order.status}
+              onChange={(e) => updateOrderStatus(order.id, e.target.value as any)}
+              className={cn(
+                "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase text-white border-none outline-none cursor-pointer",
+                ORDER_STATUS_COLORS[order.status]
+              )}
+            >
+              {Object.entries(ORDER_STATUS_LABELS).map(([val, label]) => (
+                <option key={val} value={val} className="bg-white text-zinc-900">{label}</option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        {/* Address */}
+        {order.deliveryType === 'delivery' && order.address !== 'Самовывоз' ? (
+          <div className="flex flex-col gap-1.5 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl p-3">
+            <button
+              onClick={openNav}
+              className="flex items-start gap-2 text-sm font-bold text-blue-600 dark:text-blue-400 underline decoration-blue-300 dark:decoration-blue-700 underline-offset-2 text-left"
+            >
+              <MapPin size={16} className="shrink-0 mt-0.5" />
+              {mainAddress}
+            </button>
+            {extraInfo && (
+              <span className="text-[11px] text-zinc-500 dark:text-zinc-400 ml-6">{extraInfo}</span>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl p-3 text-xs text-zinc-500">
+            <span>🏪</span> Самовывоз
+          </div>
+        )}
+
+        {/* Назначение курьера (только для админов) */}
+        {!isCourier && order.deliveryType === 'delivery' && (
+          <div className="flex items-center gap-2">
+            <Truck size={14} className="text-zinc-400 shrink-0" />
+            <select
+              value={order.courierId || ''}
+              onChange={(e) => assignCourier(order.id, e.target.value || null)}
+              className="flex-1 text-xs bg-zinc-100 dark:bg-zinc-800 rounded-xl px-3 py-2 text-zinc-700 dark:text-zinc-300 outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              <option value="">Курьер не назначен</option>
+              {couriers.map(c => (
+                <option key={c.id} value={c.id}>{c.firstName}{c.lastName ? ' ' + c.lastName : ''}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Имя курьера (отображение) */}
+        {!isCourier && order.courierName && (
+          <div className="flex items-center gap-2 text-xs">
+            <Truck size={12} className="text-purple-500" />
+            <span className="text-purple-600 dark:text-purple-400 font-medium">{order.courierName}</span>
+          </div>
+        )}
+
+        {/* Payment info */}
+        <div className="flex items-center gap-2 text-xs">
+          <PayIcon size={12} className="text-zinc-400" />
+          <span className="text-zinc-600 dark:text-zinc-300 font-medium">
+            {order.paymentType === 'cash' ? 'Наличные' : order.paymentType === 'card' ? 'Карта курьеру' : 'Онлайн'}
+          </span>
+          {order.paymentType === 'online' && (
+            <span className={cn(
+              'text-[10px] font-black uppercase px-2 py-0.5 rounded-full',
+              isPaid ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-500'
+            )}>
+              {isPaid ? 'Оплачено' : (order.paymentStatus || 'Не оплачено')}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800">
+          <span className="text-sm font-black text-zinc-900 dark:text-zinc-100">{formatPrice(order.totalAmount)}</span>
+          <button
+            onClick={() => setSelectedOrder(order)}
+            className="text-orange-500 text-xs font-bold flex items-center gap-1"
+          >
+            Подробнее <ChevronRight size={14} />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col gap-8 pb-20">
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-black text-zinc-900 dark:text-zinc-100">
-            {isCourier ? 'Заказы' : 'Админ-панель'}
+            {isCourier ? 'Мои доставки' : 'Админ-панель'}
           </h1>
           {!isCourier && (
             <button
@@ -385,114 +569,32 @@ export const AdminPage: React.FC = () => {
 
       {/* Orders */}
       {activeTab === 'orders' && (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-6">
           {!isCourier && <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-100">Последние заказы</h2>}
           {orders.length === 0 ? (
             <div className="py-12 bg-white dark:bg-zinc-900 rounded-[32px] border border-zinc-100 dark:border-zinc-800 flex flex-col items-center justify-center text-center gap-2">
               <ShoppingBag size={32} className="text-zinc-300" />
-              <p className="text-sm text-zinc-400 font-medium">Заказов пока нет</p>
+              <p className="text-sm text-zinc-400 font-medium">
+                {isCourier ? 'Нет назначенных заказов' : 'Заказов пока нет'}
+              </p>
             </div>
           ) : (
-            <div className="flex flex-col gap-4">
-              {orders.map(order => {
-                const PayIcon = order.paymentType === 'cash' ? Banknote : order.paymentType === 'card' ? Wallet : CreditCard;
-                const isPaid = order.paymentStatus === 'succeeded';
-                // Парсим адрес: "Ростов-на-Дону, улица, д. X, под. Y, ..."
-                const addressParts = order.address.split(',').map((s: string) => s.trim());
-                // Город + улица + дом (первые 3 части)
-                const mainAddress = addressParts.slice(0, 3).join(', ');
-                const extraInfo = addressParts.slice(3).join(', ');
-                // Для навигации: город, улица, дом (без "д.", "ул.", "под." и тд)
-                const navParts = addressParts.slice(0, 3).map(p => p.replace(/^д\.\s*/, '').replace(/^ул\.\s*/, ''));
-                const navAddress = navParts.join(', ');
-                const openNav = (e: React.MouseEvent) => {
-                  e.preventDefault();
-                  window.location.href = 'https://yandex.ru/maps/?mode=routes&rtext=~' + encodeURIComponent(navAddress) + '&rtt=auto';
-                };
-
-                return (
-                  <div key={order.id} className="bg-white dark:bg-zinc-900 p-6 rounded-[32px] border border-zinc-100 dark:border-zinc-800 flex flex-col gap-4">
-                    <div className="flex items-center justify-between">
-                      <button
-                        onClick={() => setSelectedOrder(order)}
-                        className="flex flex-col text-left active:opacity-70 transition-opacity"
-                      >
-                        <span className="text-sm font-black text-zinc-900 dark:text-zinc-100 flex items-center gap-1">
-                          #{order.id.slice(-6)} <ChevronRight size={14} className="text-zinc-400" />
-                        </span>
-                        <span className="text-xs text-zinc-400 font-medium">{order.name}, {order.phone}</span>
-                      </button>
-                      {!isCourier ? (
-                        <select
-                          value={order.status}
-                          onChange={(e) => updateOrderStatus(order.id, e.target.value as any)}
-                          className={cn(
-                            "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase text-white border-none outline-none cursor-pointer",
-                            ORDER_STATUS_COLORS[order.status]
-                          )}
-                        >
-                          {Object.entries(ORDER_STATUS_LABELS).map(([val, label]) => (
-                            <option key={val} value={val} className="bg-white text-zinc-900">{label}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className={cn(
-                          "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase text-white",
-                          ORDER_STATUS_COLORS[order.status]
-                        )}>
-                          {ORDER_STATUS_LABELS[order.status as keyof typeof ORDER_STATUS_LABELS]}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Address */}
-                    {order.deliveryType === 'delivery' && order.address !== 'Самовывоз' ? (
-                      <div className="flex flex-col gap-1.5 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl p-3">
-                        <button
-                          onClick={openNav}
-                          className="flex items-start gap-2 text-sm font-bold text-blue-600 dark:text-blue-400 underline decoration-blue-300 dark:decoration-blue-700 underline-offset-2 text-left"
-                        >
-                          <MapPin size={16} className="shrink-0 mt-0.5" />
-                          {mainAddress}
-                        </button>
-                        {extraInfo && (
-                          <span className="text-[11px] text-zinc-500 dark:text-zinc-400 ml-6">{extraInfo}</span>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl p-3 text-xs text-zinc-500">
-                        <span>🏪</span> Самовывоз
-                      </div>
-                    )}
-
-                    {/* Payment info */}
-                    <div className="flex items-center gap-2 text-xs">
-                      <PayIcon size={12} className="text-zinc-400" />
-                      <span className="text-zinc-600 dark:text-zinc-300 font-medium">
-                        {order.paymentType === 'cash' ? 'Наличные' : order.paymentType === 'card' ? 'Карта курьеру' : 'Онлайн'}
-                      </span>
-                      {order.paymentType === 'online' && (
-                        <span className={cn(
-                          'text-[10px] font-black uppercase px-2 py-0.5 rounded-full',
-                          isPaid ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-500'
-                        )}>
-                          {isPaid ? 'Оплачено' : (order.paymentStatus || 'Не оплачено')}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800">
-                      <span className="text-sm font-black text-zinc-900 dark:text-zinc-100">{formatPrice(order.totalAmount)}</span>
-                      <button
-                        onClick={() => setSelectedOrder(order)}
-                        className="text-orange-500 text-xs font-bold flex items-center gap-1"
-                      >
-                        Подробнее <ChevronRight size={14} />
-                      </button>
-                    </div>
+            <div className="flex flex-col gap-6">
+              {orderGroups.map(group => (
+                <div key={group.date} className="flex flex-col gap-4">
+                  {/* Заголовок дня */}
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-base font-black text-zinc-900 dark:text-zinc-100">{group.label}</h3>
+                    <span className="text-xs font-bold text-green-500 bg-green-500/10 px-2.5 py-1 rounded-full">
+                      {group.deliveredCount} / {group.orders.length} доставлено
+                    </span>
                   </div>
-                );
-              })}
+                  {/* Карточки заказов */}
+                  <div className="flex flex-col gap-4">
+                    {group.orders.map(order => renderOrderCard(order))}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>

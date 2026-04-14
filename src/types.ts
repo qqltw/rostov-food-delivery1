@@ -88,6 +88,8 @@ export interface OrderItem {
 export interface Order {
   id: string;
   userId: string;
+  courierId?: string | null;
+  courierName?: string;
   items: OrderItem[];
   totalAmount: number;
   deliveryFee: number;

@@ -117,6 +117,22 @@ export const apiService = {
     return res.json();
   },
 
+  async assignCourier(orderId: string, courierId: string | null): Promise<Order> {
+    const res = await fetch(`${API_BASE}/admin/orders/${orderId}/courier`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ courierId }),
+    });
+    if (!res.ok) throw new Error('Failed to assign courier');
+    return res.json();
+  },
+
+  async getCourierOrders(courierId: string): Promise<Order[]> {
+    const res = await fetch(`${API_BASE}/courier/orders/${courierId}`);
+    if (!res.ok) throw new Error('Failed to fetch courier orders');
+    return res.json();
+  },
+
   async getAdminUsers(): Promise<User[]> {
     const res = await fetch(`${API_BASE}/admin/users`);
     if (!res.ok) throw new Error('Failed to fetch admin users');
