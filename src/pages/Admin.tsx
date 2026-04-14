@@ -404,8 +404,8 @@ export const AdminPage: React.FC = () => {
                 const fullAddress = `Ростов-на-Дону, ${mainAddress}`;
                 const encodedAddr = encodeURIComponent(fullAddress);
                 // build_route_on_map с текстовым адресом конечной точки
-                const yandexNavUrl = `intent://build_route_on_map?lat_to=47.2357&lon_to=39.7015&addr_to=${encodedAddr}#Intent;scheme=yandexnavi;package=ru.yandex.yandexnavi;end`;
-                const iosNavUrl = `yandexnavi://build_route_on_map?lat_to=47.2357&lon_to=39.7015&addr_to=${encodedAddr}`;
+                const yandexNavUrl = `intent://build_route_on_map?addr_to=${encodedAddr}#Intent;scheme=yandexnavi;package=ru.yandex.yandexnavi;end`;
+                const iosNavUrl = `yandexnavi://build_route_on_map?addr_to=${encodedAddr}`;
                 const yandexMapsUrl = `https://yandex.ru/maps/?rtext=~${encodedAddr}&rtt=auto`;
                 const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
                 const isAndroid = /android/i.test(navigator.userAgent);
