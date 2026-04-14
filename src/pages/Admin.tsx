@@ -407,7 +407,7 @@ export const AdminPage: React.FC = () => {
                 const navAddress = navParts.join(', ');
                 const openNav = (e: React.MouseEvent) => {
                   e.preventDefault();
-                  window.location.href = 'https://yandex.ru/maps/?text=' + encodeURIComponent(navAddress);
+                  window.location.href = 'https://yandex.ru/maps/?mode=routes&rtext=~' + encodeURIComponent(navAddress) + '&rtt=auto';
                 };
 
                 return (
