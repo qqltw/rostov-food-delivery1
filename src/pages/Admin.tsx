@@ -401,21 +401,13 @@ export const AdminPage: React.FC = () => {
                 const addressParts = order.address.split(',').map((s: string) => s.trim());
                 // Город + улица + дом (первые 3 части)
                 const mainAddress = addressParts.slice(0, 3).join(', ');
-                const extraInfo = addressParts.slice(3).join(', '); // подъезд, комментарий и тд
-                // Для навигации: город + улица + номер дома (без "д.")
-                const navAddress = addressParts.slice(0, 3).join(', ').replace(/\bд\.\s*/g, '');
+                const extraInfo = addressParts.slice(3).join(', ');
+                // Для навигации: город + улица + номер (без "д.", "ул.")
+                const navAddress = addressParts.slice(0, 3).join(' ').replace(/\bд\.\s*/g, '').replace(/\bул\.\s*/g, '').replace(/\s+/g, ' ').trim();
                 const openNav = (e: React.MouseEvent) => {
                   e.preventDefault();
-                  const url = `https://yandex.ru/maps/?mode=routes&rtext=~${encodeURIComponent(navAddress)}&rtt=auto`;
-                  // Telegram WebApp
-                  if (window.Telegram?.WebApp?.openLink) {
-                    window.Telegram.WebApp.openLink(url);
-                  // MAX WebApp
-                  } else if ((window as any).WebApp?.openLink) {
-                    (window as any).WebApp.openLink(url);
-                  } else {
-                    window.open(url, '_blank');
-                  }
+                  const url = 'https://yandex.ru/maps/?rtext=~' + navAddress.replace(/ /g, '+') + '&rtt=auto';
+                  window.open(url, '_blank');
                 };
 
                 return (
