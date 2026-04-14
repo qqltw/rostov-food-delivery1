@@ -397,16 +397,16 @@ export const AdminPage: React.FC = () => {
               {orders.map(order => {
                 const PayIcon = order.paymentType === 'cash' ? Banknote : order.paymentType === 'card' ? Wallet : CreditCard;
                 const isPaid = order.paymentStatus === 'succeeded';
-                // Парсим адрес: "улица, д. X, под. Y, (комментарий), [Оставить у двери]"
+                // Парсим адрес: "Ростов-на-Дону, улица, д. X, под. Y, ..."
                 const addressParts = order.address.split(',').map((s: string) => s.trim());
-                const mainAddress = addressParts.slice(0, 2).join(', '); // улица + дом
-                const extraInfo = addressParts.slice(2).join(', '); // подъезд, комментарий и тд
-                // Чистый адрес для навигации: убираем "д.", "ул." и т.д.
-                const cleanAddress = mainAddress.replace(/\bд\.\s*/g, '').replace(/\bул\.\s*/g, '');
-                const fullAddress = `Ростов-на-Дону, ${cleanAddress}`;
+                // Город + улица + дом (первые 3 части)
+                const mainAddress = addressParts.slice(0, 3).join(', ');
+                const extraInfo = addressParts.slice(3).join(', '); // подъезд, комментарий и тд
+                // Для навигации: город + улица + номер дома (без "д.")
+                const navAddress = addressParts.slice(0, 3).join(', ').replace(/\bд\.\s*/g, '');
                 const openNav = (e: React.MouseEvent) => {
                   e.preventDefault();
-                  const url = `https://yandex.ru/maps/?mode=routes&rtext=~${encodeURIComponent(fullAddress)}&rtt=auto`;
+                  const url = `https://yandex.ru/maps/?mode=routes&rtext=~${encodeURIComponent(navAddress)}&rtt=auto`;
                   // Telegram WebApp
                   if (window.Telegram?.WebApp?.openLink) {
                     window.Telegram.WebApp.openLink(url);

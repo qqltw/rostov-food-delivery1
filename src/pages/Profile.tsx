@@ -312,6 +312,12 @@ export const ProfilePage: React.FC = () => {
                     <div className="flex flex-col gap-4">
                       <div className="grid grid-cols-2 gap-3">
                         <div className="flex flex-col gap-1.5 col-span-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 px-1">Город</label>
+                          <div className="w-full bg-zinc-200 dark:bg-zinc-800/60 rounded-2xl px-5 py-4 text-sm font-bold text-zinc-400 dark:text-zinc-500 select-none">
+                            Ростов-на-Дону
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-1.5 col-span-2">
                           <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 px-1">Улица</label>
                           <input
                             type="text"

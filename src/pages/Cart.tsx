@@ -99,6 +99,7 @@ export const CartPage: React.FC = () => {
   const formatAddress = (addr: Address | string) => {
     if (typeof addr === 'string') return addr;
     const parts = [
+      'Ростов-на-Дону',
       addr.street,
       addr.house ? `д. ${addr.house}` : '',
       addr.privateHouse ? '[Частный дом]' : '',
@@ -421,6 +422,9 @@ export const CartPage: React.FC = () => {
                 {(!selectedAddress || !Array.isArray(user?.addresses) || user.addresses.length === 0) && (
                   <div className="flex flex-col gap-3">
                     <div className="grid grid-cols-2 gap-2">
+                      <div className="col-span-2 h-12 px-4 bg-zinc-100 dark:bg-zinc-800/60 rounded-2xl border border-zinc-200 dark:border-zinc-700 flex items-center text-sm font-bold text-zinc-400 dark:text-zinc-500 select-none">
+                        г. Ростов-на-Дону
+                      </div>
                       <input
                         type="text"
                         value={manualAddress}
