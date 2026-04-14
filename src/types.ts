@@ -1,23 +1,27 @@
 export interface Address {
   street: string;
   house: string;
+  privateHouse?: boolean;
   entrance?: string;
+  floor?: string;
+  intercom?: string;
   comment?: string;
   leaveAtDoor: boolean;
 }
 
 export type Platform = 'telegram' | 'max' | 'browser';
 
-export type UserRole = 'user' | 'restaurant' | 'support' | 'superadmin' | 'admin';
+export type UserRole = 'user' | 'courier' | 'restaurant' | 'support' | 'superadmin' | 'admin';
 
 // Роли с доступом к админ-панели (admin — legacy, = superadmin)
-export const ADMIN_ROLES: UserRole[] = ['superadmin', 'support', 'restaurant', 'admin'];
+export const ADMIN_ROLES: UserRole[] = ['superadmin', 'support', 'restaurant', 'admin', 'courier'];
 
 // Роли, которые могут управлять ролями других пользователей
 export const ROLE_MANAGER_ROLES: UserRole[] = ['superadmin', 'support', 'admin'];
 
 export const ROLE_LABELS: Record<string, string> = {
   user: 'Клиент',
+  courier: 'Курьер',
   restaurant: 'Ресторан',
   support: 'Тех. поддержка',
   superadmin: 'Главный админ',

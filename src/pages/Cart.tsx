@@ -19,6 +19,11 @@ export const CartPage: React.FC = () => {
 
   const [selectedAddress, setSelectedAddress] = useState<Address | null>(user?.addresses?.[0] || null);
   const [manualAddress, setManualAddress] = useState('');
+  const [manualHouse, setManualHouse] = useState('');
+  const [manualPrivateHouse, setManualPrivateHouse] = useState(false);
+  const [manualEntrance, setManualEntrance] = useState('');
+  const [manualFloor, setManualFloor] = useState('');
+  const [manualIntercom, setManualIntercom] = useState('');
   const [phone, setPhone] = useState(user?.phone || '');
   const [comment, setComment] = useState('');
   const [orderStatus, setOrderStatus] = useState<'idle' | 'loading' | 'success' | 'awaiting_payment' | 'error'>('idle');
@@ -66,7 +71,7 @@ export const CartPage: React.FC = () => {
     }
     const addressText = selectedAddress
       ? `${selectedAddress.street}, ${selectedAddress.house}`
-      : manualAddress;
+      : manualHouse ? `${manualAddress}, ${manualHouse}` : manualAddress;
 
     if (!addressText || addressText.length < 5) {
       setDeliveryEstimate(null);
@@ -96,7 +101,10 @@ export const CartPage: React.FC = () => {
     const parts = [
       addr.street,
       addr.house ? `д. ${addr.house}` : '',
+      addr.privateHouse ? '[Частный дом]' : '',
       addr.entrance ? `под. ${addr.entrance}` : '',
+      addr.floor ? `эт. ${addr.floor}` : '',
+      addr.intercom ? `домофон ${addr.intercom}` : '',
       addr.comment ? `(${addr.comment})` : '',
       addr.leaveAtDoor ? '[Оставить у двери]' : ''
     ].filter(Boolean);
@@ -133,7 +141,15 @@ export const CartPage: React.FC = () => {
       ? 'Самовывоз'
       : selectedAddress
         ? formatAddress(selectedAddress)
-        : manualAddress;
+        : formatAddress({
+            street: manualAddress,
+            house: manualHouse,
+            privateHouse: manualPrivateHouse,
+            entrance: manualEntrance,
+            floor: manualFloor,
+            intercom: manualIntercom,
+            leaveAtDoor: false,
+          });
 
     const orderData = {
       userId: user.id,
@@ -372,13 +388,16 @@ export const CartPage: React.FC = () => {
                         <div className="flex items-center gap-2 mb-1">
                           <MapPin size={14} className={cn(selectedAddress === addr ? "text-white" : "text-orange-500")} />
                           <span className="text-sm font-bold">{addr.street}, {addr.house}</span>
+                          {addr.privateHouse && <span className={cn("text-[9px] px-1.5 py-0.5 rounded-full font-bold", selectedAddress === addr ? "bg-white/20 text-white" : "bg-zinc-200 dark:bg-zinc-700 text-zinc-500")}>Частный дом</span>}
                         </div>
                         <div className={cn(
-                          "text-[10px] font-medium ml-5",
+                          "text-[10px] font-medium ml-5 flex flex-wrap gap-x-1",
                           selectedAddress === addr ? "text-white/80" : "text-zinc-400"
                         )}>
                           {addr.entrance && <span>Подъезд {addr.entrance}</span>}
-                          {addr.leaveAtDoor && <span> • Оставить у двери</span>}
+                          {addr.floor && <span>• Этаж {addr.floor}</span>}
+                          {addr.intercom && <span>• Домофон {addr.intercom}</span>}
+                          {addr.leaveAtDoor && <span>• Оставить у двери</span>}
                         </div>
                       </button>
                     ))}
@@ -400,13 +419,58 @@ export const CartPage: React.FC = () => {
                 ) : null}
 
                 {(!selectedAddress || !Array.isArray(user?.addresses) || user.addresses.length === 0) && (
-                  <input
-                    type="text"
-                    value={manualAddress}
-                    onChange={(e) => setManualAddress(e.target.value)}
-                    placeholder="Улица, дом, квартира"
-                    className="w-full h-12 px-4 bg-zinc-50 dark:bg-zinc-800 rounded-2xl border border-zinc-100 dark:border-zinc-700 text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
-                  />
+                  <div className="flex flex-col gap-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        value={manualAddress}
+                        onChange={(e) => setManualAddress(e.target.value)}
+                        placeholder="Улица"
+                        className="col-span-2 h-12 px-4 bg-zinc-50 dark:bg-zinc-800 rounded-2xl border border-zinc-100 dark:border-zinc-700 text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
+                      />
+                      <input
+                        type="text"
+                        value={manualHouse}
+                        onChange={(e) => setManualHouse(e.target.value)}
+                        placeholder="Дом"
+                        className="h-12 px-4 bg-zinc-50 dark:bg-zinc-800 rounded-2xl border border-zinc-100 dark:border-zinc-700 text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
+                      />
+                      <label className="flex items-center gap-2 h-12 px-4 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={manualPrivateHouse}
+                          onChange={(e) => { setManualPrivateHouse(e.target.checked); setManualEntrance(''); setManualFloor(''); setManualIntercom(''); }}
+                          className="w-4 h-4 rounded accent-orange-500"
+                        />
+                        <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300">Частный дом</span>
+                      </label>
+                    </div>
+                    {!manualPrivateHouse && (
+                      <div className="grid grid-cols-3 gap-2">
+                        <input
+                          type="text"
+                          value={manualEntrance}
+                          onChange={(e) => setManualEntrance(e.target.value)}
+                          placeholder="Подъезд"
+                          className="h-12 px-4 bg-zinc-50 dark:bg-zinc-800 rounded-2xl border border-zinc-100 dark:border-zinc-700 text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
+                        />
+                        <input
+                          type="text"
+                          value={manualFloor}
+                          onChange={(e) => setManualFloor(e.target.value)}
+                          placeholder="Этаж"
+                          className="h-12 px-4 bg-zinc-50 dark:bg-zinc-800 rounded-2xl border border-zinc-100 dark:border-zinc-700 text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
+                        />
+                        <input
+                          type="text"
+                          value={manualIntercom}
+                          onChange={(e) => setManualIntercom(e.target.value)}
+                          placeholder="Домофон"
+                          className="h-12 px-4 bg-zinc-50 dark:bg-zinc-800 rounded-2xl border border-zinc-100 dark:border-zinc-700 text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
+                        />
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
 

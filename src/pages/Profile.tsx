@@ -27,7 +27,10 @@ export const ProfilePage: React.FC = () => {
   const [addressForm, setAddressForm] = useState<Address>({
     street: '',
     house: '',
+    privateHouse: false,
     entrance: '',
+    floor: '',
+    intercom: '',
     comment: '',
     leaveAtDoor: false
   });
@@ -140,9 +143,10 @@ export const ProfilePage: React.FC = () => {
                 user.role === 'superadmin' ? "bg-red-500/10 text-red-500" :
                 user.role === 'support' ? "bg-blue-500/10 text-blue-500" :
                 user.role === 'restaurant' ? "bg-green-500/10 text-green-500" :
+                user.role === 'courier' ? "bg-purple-500/10 text-purple-500" :
                 "bg-zinc-900 dark:bg-white text-white dark:text-zinc-900"
               )}>
-                {{ superadmin: 'Главный админ', support: 'Тех. поддержка', restaurant: 'Ресторан' }[user.role] || 'Админ'}
+                {{ superadmin: 'Главный админ', support: 'Тех. поддержка', restaurant: 'Ресторан', courier: 'Курьер' }[user.role] || 'Админ'}
               </span>
             )}
           </div>
@@ -309,7 +313,7 @@ export const ProfilePage: React.FC = () => {
                       <div className="grid grid-cols-2 gap-3">
                         <div className="flex flex-col gap-1.5 col-span-2">
                           <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 px-1">Улица</label>
-                          <input 
+                          <input
                             type="text"
                             value={addressForm.street}
                             onChange={(e) => setAddressForm(prev => ({ ...prev, street: e.target.value }))}
@@ -319,7 +323,7 @@ export const ProfilePage: React.FC = () => {
                         </div>
                         <div className="flex flex-col gap-1.5">
                           <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 px-1">Дом</label>
-                          <input 
+                          <input
                             type="text"
                             value={addressForm.house}
                             onChange={(e) => setAddressForm(prev => ({ ...prev, house: e.target.value }))}
@@ -328,29 +332,66 @@ export const ProfilePage: React.FC = () => {
                           />
                         </div>
                         <div className="flex flex-col gap-1.5">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 px-1">Подъезд</label>
-                          <input 
-                            type="text"
-                            value={addressForm.entrance}
-                            onChange={(e) => setAddressForm(prev => ({ ...prev, entrance: e.target.value }))}
-                            placeholder="3"
-                            className="w-full bg-zinc-100 dark:bg-zinc-800 rounded-2xl px-5 py-4 text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none border-2 border-transparent focus:border-orange-500 transition-all"
-                          />
-                        </div>
-                        <div className="flex flex-col gap-1.5 col-span-2">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 px-1">Комментарий курьеру</label>
-                          <textarea 
-                            value={addressForm.comment}
-                            onChange={(e) => setAddressForm(prev => ({ ...prev, comment: e.target.value }))}
-                            placeholder="Код домофона, этаж..."
-                            className="w-full bg-zinc-100 dark:bg-zinc-800 rounded-2xl px-5 py-4 text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none border-2 border-transparent focus:border-orange-500 transition-all resize-none h-24"
-                          />
+                          <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-zinc-400 px-1 h-full">
+                            <input
+                              type="checkbox"
+                              checked={addressForm.privateHouse || false}
+                              onChange={(e) => setAddressForm(prev => ({ ...prev, privateHouse: e.target.checked, entrance: '', floor: '', intercom: '' }))}
+                              className="w-4 h-4 rounded accent-orange-500"
+                            />
+                            Частный дом
+                          </label>
                         </div>
                       </div>
-                      
+
+                      {!addressForm.privateHouse && (
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 px-1">Подъезд</label>
+                            <input
+                              type="text"
+                              value={addressForm.entrance}
+                              onChange={(e) => setAddressForm(prev => ({ ...prev, entrance: e.target.value }))}
+                              placeholder="3"
+                              className="w-full bg-zinc-100 dark:bg-zinc-800 rounded-2xl px-5 py-4 text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none border-2 border-transparent focus:border-orange-500 transition-all"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 px-1">Этаж</label>
+                            <input
+                              type="text"
+                              value={addressForm.floor}
+                              onChange={(e) => setAddressForm(prev => ({ ...prev, floor: e.target.value }))}
+                              placeholder="5"
+                              className="w-full bg-zinc-100 dark:bg-zinc-800 rounded-2xl px-5 py-4 text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none border-2 border-transparent focus:border-orange-500 transition-all"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 px-1">Домофон</label>
+                            <input
+                              type="text"
+                              value={addressForm.intercom}
+                              onChange={(e) => setAddressForm(prev => ({ ...prev, intercom: e.target.value }))}
+                              placeholder="123"
+                              className="w-full bg-zinc-100 dark:bg-zinc-800 rounded-2xl px-5 py-4 text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none border-2 border-transparent focus:border-orange-500 transition-all"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 px-1">Комментарий курьеру</label>
+                        <textarea
+                          value={addressForm.comment}
+                          onChange={(e) => setAddressForm(prev => ({ ...prev, comment: e.target.value }))}
+                          placeholder="Ориентиры, пожелания..."
+                          className="w-full bg-zinc-100 dark:bg-zinc-800 rounded-2xl px-5 py-4 text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none border-2 border-transparent focus:border-orange-500 transition-all resize-none h-24"
+                        />
+                      </div>
+
                       <label className="flex items-center gap-3 p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-zinc-100 dark:border-zinc-800 cursor-pointer group">
                         <div className="relative flex items-center">
-                          <input 
+                          <input
                             type="checkbox"
                             checked={addressForm.leaveAtDoor}
                             onChange={(e) => setAddressForm(prev => ({ ...prev, leaveAtDoor: e.target.checked }))}
@@ -362,7 +403,7 @@ export const ProfilePage: React.FC = () => {
                         <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100 group-hover:text-orange-500 transition-colors">Оставить у двери</span>
                       </label>
 
-                      <button 
+                      <button
                         onClick={handleAddAddress}
                         disabled={isUpdating || !addressForm.street || !addressForm.house}
                         className="w-full py-4 bg-orange-500 text-white rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-orange-600 active:scale-[0.98] transition-all shadow-lg shadow-orange-500/20"
@@ -380,9 +421,12 @@ export const ProfilePage: React.FC = () => {
                               <div className="flex items-center gap-2">
                                 <MapPin size={14} className="text-orange-500" />
                                 <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{address.street}, {address.house}</span>
+                                {address.privateHouse && <span className="text-[9px] bg-zinc-200 dark:bg-zinc-700 text-zinc-500 px-1.5 py-0.5 rounded-full font-bold">Частный дом</span>}
                               </div>
-                              <div className="flex items-center gap-2 text-[10px] text-zinc-400 font-medium ml-5">
+                              <div className="flex items-center gap-2 text-[10px] text-zinc-400 font-medium ml-5 flex-wrap">
                                 {address.entrance && <span>Подъезд {address.entrance}</span>}
+                                {address.floor && <span>• Этаж {address.floor}</span>}
+                                {address.intercom && <span>• Домофон {address.intercom}</span>}
                                 {address.leaveAtDoor && <span>• Оставить у двери</span>}
                               </div>
                             </div>

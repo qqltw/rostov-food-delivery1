@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Package, ShoppingBag, Users, Plus, Edit2, Trash2, FolderTree, Image, Database, ChevronRight, CreditCard, Banknote, Wallet } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingBag, Users, Plus, Edit2, Trash2, FolderTree, Image, Database, ChevronRight, CreditCard, Banknote, Wallet, MapPin } from 'lucide-react';
 import { apiService } from '../services/apiService';
 import { Product, Order, Category, User, Banner, ROLE_LABELS, UserRole, ADMIN_ROLES } from '../types';
 import { formatPrice, cn } from '../lib/utils';
@@ -15,7 +15,8 @@ type AdminTab = 'dashboard' | 'products' | 'categories' | 'orders' | 'users' | '
 
 export const AdminPage: React.FC = () => {
   const { user: currentUser, canManageRoles } = useAuth();
-  const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
+  const isCourier = currentUser?.role === 'courier';
+  const [activeTab, setActiveTab] = useState<AdminTab>(isCourier ? 'orders' : 'dashboard');
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -163,7 +164,7 @@ export const AdminPage: React.FC = () => {
 
   if (isLoading) return <div className="p-8 animate-pulse text-zinc-900 dark:text-zinc-100">Загрузка админки...</div>;
 
-  const tabs: { id: AdminTab; label: string; icon: any }[] = [
+  const allTabs: { id: AdminTab; label: string; icon: any }[] = [
     { id: 'dashboard', label: 'Дашборд', icon: LayoutDashboard },
     { id: 'products', label: 'Товары', icon: Package },
     { id: 'categories', label: 'Категории', icon: FolderTree },
@@ -172,19 +173,26 @@ export const AdminPage: React.FC = () => {
     { id: 'users', label: 'Клиенты', icon: Users },
   ];
 
+  // Курьер видит только заказы
+  const tabs = isCourier ? allTabs.filter(t => t.id === 'orders') : allTabs;
+
   return (
     <div className="flex flex-col gap-8 pb-20">
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-black text-zinc-900 dark:text-zinc-100">Админ-панель</h1>
-          <button
-            onClick={handleSeedDatabase}
-            disabled={isSeeding}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500/10 text-orange-500 text-[10px] font-bold rounded-full hover:bg-orange-500/20 transition-colors disabled:opacity-50"
-          >
-            <Database size={12} />
-            {isSeeding ? 'Загрузка...' : 'Seed DB'}
-          </button>
+          <h1 className="text-3xl font-black text-zinc-900 dark:text-zinc-100">
+            {isCourier ? 'Заказы' : 'Админ-панель'}
+          </h1>
+          {!isCourier && (
+            <button
+              onClick={handleSeedDatabase}
+              disabled={isSeeding}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500/10 text-orange-500 text-[10px] font-bold rounded-full hover:bg-orange-500/20 transition-colors disabled:opacity-50"
+            >
+              <Database size={12} />
+              {isSeeding ? 'Загрузка...' : 'Seed DB'}
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-2">
           {tabs.map(tab => {
@@ -378,7 +386,7 @@ export const AdminPage: React.FC = () => {
       {/* Orders */}
       {activeTab === 'orders' && (
         <div className="flex flex-col gap-4">
-          <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-100">Последние заказы</h2>
+          {!isCourier && <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-100">Последние заказы</h2>}
           {orders.length === 0 ? (
             <div className="py-12 bg-white dark:bg-zinc-900 rounded-[32px] border border-zinc-100 dark:border-zinc-800 flex flex-col items-center justify-center text-center gap-2">
               <ShoppingBag size={32} className="text-zinc-300" />
@@ -389,6 +397,13 @@ export const AdminPage: React.FC = () => {
               {orders.map(order => {
                 const PayIcon = order.paymentType === 'cash' ? Banknote : order.paymentType === 'card' ? Wallet : CreditCard;
                 const isPaid = order.paymentStatus === 'succeeded';
+                // Парсим адрес: "улица, д. X, под. Y, (комментарий), [Оставить у двери]"
+                const addressParts = order.address.split(',').map((s: string) => s.trim());
+                const mainAddress = addressParts.slice(0, 2).join(', '); // улица + дом
+                const extraInfo = addressParts.slice(2).join(', '); // подъезд, комментарий и тд
+                const yandexNavUrl = `yandexnavi://build_route_on_map?lat_to=&lon_to=&app=yandexnavi&context=addr&addr=${encodeURIComponent(order.address)}`;
+                const yandexMapsUrl = `https://yandex.ru/maps/?text=${encodeURIComponent(order.address)}`;
+
                 return (
                   <div key={order.id} className="bg-white dark:bg-zinc-900 p-6 rounded-[32px] border border-zinc-100 dark:border-zinc-800 flex flex-col gap-4">
                     <div className="flex items-center justify-between">
@@ -401,44 +416,66 @@ export const AdminPage: React.FC = () => {
                         </span>
                         <span className="text-xs text-zinc-400 font-medium">{order.name}, {order.phone}</span>
                       </button>
-                      <select
-                        value={order.status}
-                        onChange={(e) => updateOrderStatus(order.id, e.target.value as any)}
-                        className={cn(
-                          "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase text-white border-none outline-none cursor-pointer",
+                      {!isCourier ? (
+                        <select
+                          value={order.status}
+                          onChange={(e) => updateOrderStatus(order.id, e.target.value as any)}
+                          className={cn(
+                            "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase text-white border-none outline-none cursor-pointer",
+                            ORDER_STATUS_COLORS[order.status]
+                          )}
+                        >
+                          {Object.entries(ORDER_STATUS_LABELS).map(([val, label]) => (
+                            <option key={val} value={val} className="bg-white text-zinc-900">{label}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className={cn(
+                          "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase text-white",
                           ORDER_STATUS_COLORS[order.status]
-                        )}
-                      >
-                        {Object.entries(ORDER_STATUS_LABELS).map(([val, label]) => (
-                          <option key={val} value={val} className="bg-white text-zinc-900">{label}</option>
-                        ))}
-                      </select>
+                        )}>
+                          {ORDER_STATUS_LABELS[order.status as keyof typeof ORDER_STATUS_LABELS]}
+                        </span>
+                      )}
                     </div>
 
-                    {/* Address + payment quick view */}
-                    <button
-                      onClick={() => setSelectedOrder(order)}
-                      className="flex flex-col gap-2 text-left bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl p-3 active:opacity-70 transition-opacity"
-                    >
-                      <div className="flex items-start gap-2 text-xs text-zinc-600 dark:text-zinc-300">
-                        <span className="text-zinc-400 font-bold">{order.deliveryType === 'delivery' ? '🚚' : '🏪'}</span>
-                        <span className="line-clamp-2">{order.address}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs">
-                        <PayIcon size={12} className="text-zinc-400" />
-                        <span className="text-zinc-600 dark:text-zinc-300 font-medium">
-                          {order.paymentType === 'cash' ? 'Наличные' : order.paymentType === 'card' ? 'Карта курьеру' : 'Онлайн'}
-                        </span>
-                        {order.paymentType === 'online' && (
-                          <span className={cn(
-                            'text-[10px] font-black uppercase px-2 py-0.5 rounded-full',
-                            isPaid ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-500'
-                          )}>
-                            {isPaid ? 'Оплачено' : (order.paymentStatus || 'Не оплачено')}
-                          </span>
+                    {/* Address */}
+                    {order.deliveryType === 'delivery' && order.address !== 'Самовывоз' ? (
+                      <div className="flex flex-col gap-1.5 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl p-3">
+                        <a
+                          href={/android|iphone|ipad|ipod/i.test(navigator.userAgent) ? yandexNavUrl : yandexMapsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-start gap-2 text-sm font-bold text-blue-600 dark:text-blue-400 underline decoration-blue-300 dark:decoration-blue-700 underline-offset-2"
+                        >
+                          <MapPin size={16} className="shrink-0 mt-0.5" />
+                          {mainAddress}
+                        </a>
+                        {extraInfo && (
+                          <span className="text-[11px] text-zinc-500 dark:text-zinc-400 ml-6">{extraInfo}</span>
                         )}
                       </div>
-                    </button>
+                    ) : (
+                      <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl p-3 text-xs text-zinc-500">
+                        <span>🏪</span> Самовывоз
+                      </div>
+                    )}
+
+                    {/* Payment info */}
+                    <div className="flex items-center gap-2 text-xs">
+                      <PayIcon size={12} className="text-zinc-400" />
+                      <span className="text-zinc-600 dark:text-zinc-300 font-medium">
+                        {order.paymentType === 'cash' ? 'Наличные' : order.paymentType === 'card' ? 'Карта курьеру' : 'Онлайн'}
+                      </span>
+                      {order.paymentType === 'online' && (
+                        <span className={cn(
+                          'text-[10px] font-black uppercase px-2 py-0.5 rounded-full',
+                          isPaid ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-500'
+                        )}>
+                          {isPaid ? 'Оплачено' : (order.paymentStatus || 'Не оплачено')}
+                        </span>
+                      )}
+                    </div>
 
                     <div className="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800">
                       <span className="text-sm font-black text-zinc-900 dark:text-zinc-100">{formatPrice(order.totalAmount)}</span>
@@ -492,6 +529,7 @@ export const AdminPage: React.FC = () => {
                       (user.role === 'superadmin' || user.role === 'admin') ? "bg-red-500/10 text-red-500" :
                       user.role === 'support' ? "bg-blue-500/10 text-blue-500" :
                       user.role === 'restaurant' ? "bg-green-500/10 text-green-500" :
+                      user.role === 'courier' ? "bg-purple-500/10 text-purple-500" :
                       "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"
                     )}>
                       {ROLE_LABELS[user.role] || user.role}
@@ -512,6 +550,7 @@ export const AdminPage: React.FC = () => {
                       className="w-full text-xs bg-zinc-100 dark:bg-zinc-800 rounded-xl px-3 py-2 text-zinc-700 dark:text-zinc-300 outline-none focus:ring-2 focus:ring-orange-500"
                     >
                       <option value="user">Клиент</option>
+                      <option value="courier">Курьер</option>
                       <option value="restaurant">Ресторан</option>
                       <option value="support">Тех. поддержка</option>
                       {(currentUser?.role === 'superadmin' || currentUser?.role === 'admin') && (

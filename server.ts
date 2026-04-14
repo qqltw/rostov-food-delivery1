@@ -69,11 +69,11 @@ function isAdminId(platform: string, platformId: bigint): boolean {
 }
 
 // Роли с доступом к админ-панели (admin — legacy alias for superadmin)
-const ADMIN_ROLES = ['superadmin', 'support', 'restaurant', 'admin'];
+const ADMIN_ROLES = ['superadmin', 'support', 'restaurant', 'admin', 'courier'];
 // Роли, которые могут менять роли других
 const ROLE_MANAGER_ROLES = ['superadmin', 'support', 'admin'];
 // Все допустимые роли
-const ALL_ROLES = ['user', 'restaurant', 'support', 'superadmin'];
+const ALL_ROLES = ['user', 'courier', 'restaurant', 'support', 'superadmin'];
 
 // Password hashing helpers (built-in crypto, no extra deps)
 function hashPassword(password: string): Promise<string> {
