@@ -514,7 +514,7 @@ export const AdminPage: React.FC = () => {
                         <option value="user">Клиент</option>
                         <option value="restaurant">Ресторан</option>
                         <option value="support">Тех. поддержка</option>
-                        {currentUser?.role === 'superadmin' && (
+                        {(currentUser?.role === 'superadmin' || currentUser?.role === 'admin') && (
                           <option value="superadmin">Главный админ</option>
                         )}
                       </select>

@@ -68,10 +68,10 @@ function isAdminId(platform: string, platformId: bigint): boolean {
   return ADMIN_IDS[platform] === platformId;
 }
 
-// Роли с доступом к админ-панели
-const ADMIN_ROLES = ['superadmin', 'support', 'restaurant'];
+// Роли с доступом к админ-панели (admin — legacy alias for superadmin)
+const ADMIN_ROLES = ['superadmin', 'support', 'restaurant', 'admin'];
 // Роли, которые могут менять роли других
-const ROLE_MANAGER_ROLES = ['superadmin', 'support'];
+const ROLE_MANAGER_ROLES = ['superadmin', 'support', 'admin'];
 // Все допустимые роли
 const ALL_ROLES = ['user', 'restaurant', 'support', 'superadmin'];
 
@@ -577,7 +577,7 @@ app.patch('/api/admin/users/:id/role', async (req, res) => {
       return res.status(403).json({ error: 'Недостаточно прав для смены ролей' });
     }
 
-    // restaurant can't assign superadmin/support roles
+    // support can't assign superadmin role
     if (requester.role === 'support' && role === 'superadmin') {
       return res.status(403).json({ error: 'Тех. поддержка не может назначать главных админов' });
     }
@@ -588,7 +588,8 @@ app.patch('/api/admin/users/:id/role', async (req, res) => {
     }
 
     // Can't change role of another superadmin (only superadmin themselves)
-    if (targetUser.role === 'superadmin' && requester.role !== 'superadmin') {
+    const isSuperadmin = (r: string) => r === 'superadmin' || r === 'admin';
+    if (isSuperadmin(targetUser.role) && !isSuperadmin(requester.role)) {
       return res.status(403).json({ error: 'Нельзя изменить роль главного администратора' });
     }
 
