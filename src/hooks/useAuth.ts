@@ -12,7 +12,7 @@ interface AuthState {
   needsLogin: boolean; // true when opened in browser (no messenger)
   setUser: (user: User | null) => void;
   init: () => Promise<void>;
-  loginByPassword: (login: string, password: string) => Promise<void>;
+  loginByPassword: (login: string, password: string, remember?: boolean) => Promise<void>;
   logout: () => void;
 }
 
@@ -31,8 +31,21 @@ export const useAuth = create<AuthState>((set) => ({
     const { platform, user: platformUser, debug } = detectPlatform();
     let debugInfo = debug;
 
-    // Браузер — показываем форму входа
+    // Браузер — проверяем сохранённую сессию, иначе показываем форму входа
     if (platform === 'browser') {
+      const saved = localStorage.getItem('auth_credentials');
+      if (saved) {
+        try {
+          const { login, password } = JSON.parse(saved);
+          const user = await apiService.loginPassword(login, password);
+          debugInfo += `✓ Restored session [browser]: ${user.firstName} (${user.role})\n`;
+          set({ user, isAdmin: user.role === 'admin', isLoading: false, debugInfo });
+          return;
+        } catch {
+          localStorage.removeItem('auth_credentials');
+          debugInfo += '✗ Saved session expired, login required\n';
+        }
+      }
       debugInfo += '→ Browser detected, login required\n';
       set({ user: null, isAdmin: false, isLoading: false, needsLogin: true, debugInfo });
       return;
@@ -73,10 +86,13 @@ export const useAuth = create<AuthState>((set) => ({
     }
   },
 
-  loginByPassword: async (login: string, password: string) => {
+  loginByPassword: async (login: string, password: string, remember = false) => {
     set({ isLoading: true, authError: null });
     try {
       const user = await apiService.loginPassword(login, password);
+      if (remember) {
+        localStorage.setItem('auth_credentials', JSON.stringify({ login, password }));
+      }
       set({
         user,
         isAdmin: user.role === 'admin',
@@ -92,6 +108,7 @@ export const useAuth = create<AuthState>((set) => ({
   },
 
   logout: () => {
+    localStorage.removeItem('auth_credentials');
     set({ user: null, isAdmin: false, needsLogin: true, authError: null });
   },
 }));

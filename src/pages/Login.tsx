@@ -7,12 +7,13 @@ export function LoginPage() {
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
+  const [remember, setRemember] = useState(true);
   const [regError, setRegError] = useState('');
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!login.trim() || !password.trim()) return;
-    await loginByPassword(login.trim(), password.trim());
+    await loginByPassword(login.trim(), password.trim(), remember);
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -39,7 +40,7 @@ export function LoginPage() {
         return;
       }
       // После регистрации — сразу логинимся
-      await loginByPassword(login.trim(), password.trim());
+      await loginByPassword(login.trim(), password.trim(), remember);
     } catch {
       setRegError('Ошибка соединения');
     }
@@ -90,6 +91,16 @@ export function LoginPage() {
             autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
             className="w-full px-4 py-3 rounded-xl bg-zinc-100 dark:bg-zinc-900 text-zinc-900 dark:text-white text-sm outline-none focus:ring-2 focus:ring-orange-500"
           />
+
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+              className="w-4 h-4 rounded accent-orange-500"
+            />
+            <span className="text-sm text-zinc-600 dark:text-zinc-400">Запомнить меня</span>
+          </label>
 
           {(authError || regError) && (
             <p className="text-red-500 text-sm text-center">{regError || authError}</p>
