@@ -8,11 +8,26 @@ export interface Address {
 
 export type Platform = 'telegram' | 'max' | 'browser';
 
+export type UserRole = 'user' | 'restaurant' | 'support' | 'superadmin';
+
+// Роли с доступом к админ-панели
+export const ADMIN_ROLES: UserRole[] = ['superadmin', 'support', 'restaurant'];
+
+// Роли, которые могут управлять ролями других пользователей
+export const ROLE_MANAGER_ROLES: UserRole[] = ['superadmin', 'support'];
+
+export const ROLE_LABELS: Record<UserRole, string> = {
+  user: 'Клиент',
+  restaurant: 'Ресторан',
+  support: 'Тех. поддержка',
+  superadmin: 'Главный админ',
+};
+
 export interface User {
   id: string;
   platform: Platform;
   platformId: string;
-  telegramId?: string; // deprecated, use platformId
+  telegramId?: string;
   firstName: string;
   lastName?: string;
   username?: string;
@@ -20,7 +35,7 @@ export interface User {
   phone?: string;
   addresses: Address[];
   favorites: string[];
-  role: 'user' | 'admin';
+  role: UserRole;
   createdAt: string;
   updatedAt: string;
 }

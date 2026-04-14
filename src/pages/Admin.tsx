@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { LayoutDashboard, Package, ShoppingBag, Users, Plus, Edit2, Trash2, FolderTree, Image, Database, ChevronRight, CreditCard, Banknote, Wallet } from 'lucide-react';
 import { apiService } from '../services/apiService';
-import { Product, Order, Category, User, Banner } from '../types';
+import { Product, Order, Category, User, Banner, ROLE_LABELS, UserRole, ADMIN_ROLES } from '../types';
 import { formatPrice, cn } from '../lib/utils';
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from '../constants';
 import { Button } from '../components/Button';
@@ -9,10 +9,12 @@ import { ProductModal } from '../components/admin/ProductModal';
 import { CategoryModal } from '../components/admin/CategoryModal';
 import { BannerModal } from '../components/admin/BannerModal';
 import { OrderDetailsModal } from '../components/OrderDetailsModal';
+import { useAuth } from '../hooks/useAuth';
 
 type AdminTab = 'dashboard' | 'products' | 'categories' | 'orders' | 'users' | 'banners';
 
 export const AdminPage: React.FC = () => {
+  const { user: currentUser, canManageRoles } = useAuth();
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -486,11 +488,37 @@ export const AdminPage: React.FC = () => {
                       )}
                     </div>
                   </div>
-                  <div className={cn(
-                    "text-[10px] font-bold uppercase px-2 py-0.5 rounded-full",
-                    user.role === 'admin' ? "bg-orange-500/10 text-orange-500" : "text-zinc-400"
-                  )}>
-                    {user.role === 'admin' ? 'Админ' : 'Клиент'}
+                  <div className="flex items-center gap-2">
+                    <span className={cn(
+                      "text-[10px] font-bold uppercase px-2 py-0.5 rounded-full",
+                      user.role === 'superadmin' ? "bg-red-500/10 text-red-500" :
+                      user.role === 'support' ? "bg-blue-500/10 text-blue-500" :
+                      user.role === 'restaurant' ? "bg-green-500/10 text-green-500" :
+                      "text-zinc-400"
+                    )}>
+                      {ROLE_LABELS[user.role] || user.role}
+                    </span>
+                    {canManageRoles && currentUser?.id !== user.id && (
+                      <select
+                        value={user.role}
+                        onChange={async (e) => {
+                          try {
+                            await apiService.updateUserRole(user.id, e.target.value, currentUser!.id);
+                            setUsers(users.map(u => u.id === user.id ? { ...u, role: e.target.value as UserRole } : u));
+                          } catch (err: any) {
+                            alert(err.message || 'Ошибка смены роли');
+                          }
+                        }}
+                        className="text-[10px] bg-zinc-100 dark:bg-zinc-800 rounded-lg px-1.5 py-0.5 text-zinc-600 dark:text-zinc-300 outline-none"
+                      >
+                        <option value="user">Клиент</option>
+                        <option value="restaurant">Ресторан</option>
+                        <option value="support">Тех. поддержка</option>
+                        {currentUser?.role === 'superadmin' && (
+                          <option value="superadmin">Главный админ</option>
+                        )}
+                      </select>
+                    )}
                   </div>
                 </div>
               ))}

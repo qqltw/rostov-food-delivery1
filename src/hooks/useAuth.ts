@@ -1,15 +1,24 @@
 import { create } from 'zustand';
-import { User } from '../types';
+import { User, ADMIN_ROLES, ROLE_MANAGER_ROLES, UserRole } from '../types';
 import { apiService } from '../services/apiService';
 import { detectPlatform } from '../lib/platform';
+
+function hasAdminAccess(role?: UserRole): boolean {
+  return !!role && ADMIN_ROLES.includes(role);
+}
+
+function canManageRoles(role?: UserRole): boolean {
+  return !!role && ROLE_MANAGER_ROLES.includes(role);
+}
 
 interface AuthState {
   user: User | null;
   isLoading: boolean;
   isAdmin: boolean;
+  canManageRoles: boolean;
   authError: string | null;
   debugInfo: string;
-  needsLogin: boolean; // true when opened in browser (no messenger)
+  needsLogin: boolean;
   setUser: (user: User | null) => void;
   init: () => Promise<void>;
   loginByPassword: (login: string, password: string, remember?: boolean) => Promise<void>;
@@ -20,10 +29,11 @@ export const useAuth = create<AuthState>((set) => ({
   user: null,
   isLoading: true,
   isAdmin: false,
+  canManageRoles: false,
   authError: null,
   debugInfo: '',
   needsLogin: false,
-  setUser: (user) => set({ user, isAdmin: user?.role === 'admin' }),
+  setUser: (user) => set({ user, isAdmin: hasAdminAccess(user?.role), canManageRoles: canManageRoles(user?.role) }),
 
   init: async () => {
     set({ isLoading: true, authError: null, needsLogin: false });
@@ -39,7 +49,7 @@ export const useAuth = create<AuthState>((set) => ({
           const { login, password } = JSON.parse(saved);
           const user = await apiService.loginPassword(login, password);
           debugInfo += `✓ Restored session [browser]: ${user.firstName} (${user.role})\n`;
-          set({ user, isAdmin: user.role === 'admin', isLoading: false, debugInfo });
+          set({ user, isAdmin: hasAdminAccess(user.role), canManageRoles: canManageRoles(user.role), isLoading: false, debugInfo });
           return;
         } catch {
           localStorage.removeItem('auth_credentials');
@@ -69,7 +79,8 @@ export const useAuth = create<AuthState>((set) => ({
       debugInfo += `✓ Auth success [${platform}]: ${user.firstName} (${user.role})\n`;
       set({
         user,
-        isAdmin: user.role === 'admin',
+        isAdmin: hasAdminAccess(user.role),
+        canManageRoles: canManageRoles(user.role),
         isLoading: false,
         debugInfo,
       });
@@ -79,6 +90,7 @@ export const useAuth = create<AuthState>((set) => ({
       set({
         user: null,
         isAdmin: false,
+        canManageRoles: false,
         isLoading: false,
         authError: error?.message || 'Ошибка авторизации',
         debugInfo,
@@ -95,7 +107,8 @@ export const useAuth = create<AuthState>((set) => ({
       }
       set({
         user,
-        isAdmin: user.role === 'admin',
+        isAdmin: hasAdminAccess(user.role),
+        canManageRoles: canManageRoles(user.role),
         isLoading: false,
         needsLogin: false,
       });
@@ -109,6 +122,6 @@ export const useAuth = create<AuthState>((set) => ({
 
   logout: () => {
     localStorage.removeItem('auth_credentials');
-    set({ user: null, isAdmin: false, needsLogin: true, authError: null });
+    set({ user: null, isAdmin: false, canManageRoles: false, needsLogin: true, authError: null });
   },
 }));

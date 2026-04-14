@@ -123,6 +123,19 @@ export const apiService = {
     return res.json();
   },
 
+  async updateUserRole(userId: string, role: string, requesterId: string): Promise<User> {
+    const res = await fetch(`${API_BASE}/admin/users/${userId}/role`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role, requesterId }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({ error: 'Failed to update role' }));
+      throw new Error(data.error || 'Failed to update role');
+    }
+    return res.json();
+  },
+
   async createProduct(productData: any): Promise<Product> {
     const res = await fetch(`${API_BASE}/admin/products`, {
       method: 'POST',

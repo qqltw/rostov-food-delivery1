@@ -68,6 +68,13 @@ function isAdminId(platform: string, platformId: bigint): boolean {
   return ADMIN_IDS[platform] === platformId;
 }
 
+// Роли с доступом к админ-панели
+const ADMIN_ROLES = ['superadmin', 'support', 'restaurant'];
+// Роли, которые могут менять роли других
+const ROLE_MANAGER_ROLES = ['superadmin', 'support'];
+// Все допустимые роли
+const ALL_ROLES = ['user', 'restaurant', 'support', 'superadmin'];
+
 // Password hashing helpers (built-in crypto, no extra deps)
 function hashPassword(password: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -133,7 +140,7 @@ app.post('/api/auth/platform', async (req, res) => {
         username: username || null,
         photoUrl: photo_url || null,
         phone: null,
-        role: isAdminId(platform, platformId) ? 'admin' : 'user',
+        role: isAdminId(platform, platformId) ? 'superadmin' : 'user',
         addresses: [],
         favorites: [],
       });
@@ -162,7 +169,7 @@ app.post('/api/auth/platform', async (req, res) => {
           lastName: last_name,
           username,
           photoUrl: photo_url,
-          role: isAdminId(platform, platformId) ? 'admin' : 'user',
+          role: isAdminId(platform, platformId) ? 'superadmin' : 'user',
         },
       });
     } else {
@@ -173,7 +180,7 @@ app.post('/api/auth/platform', async (req, res) => {
           lastName: last_name,
           username,
           photoUrl: photo_url,
-          role: isAdminId(platform, platformId) ? 'admin' : user.role,
+          role: isAdminId(platform, platformId) ? 'superadmin' : user.role,
         },
       });
     }
@@ -550,6 +557,49 @@ app.get('/api/admin/users', async (req, res) => {
     res.json(sanitizedUsers);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+// Change user role (only superadmin and support can do this)
+app.patch('/api/admin/users/:id/role', async (req, res) => {
+  try {
+    const { role, requesterId } = req.body;
+    if (!role || !requesterId) {
+      return res.status(400).json({ error: 'Missing role or requesterId' });
+    }
+    if (!ALL_ROLES.includes(role)) {
+      return res.status(400).json({ error: 'Invalid role' });
+    }
+
+    // Check requester permissions
+    const requester = await prisma.user.findUnique({ where: { id: requesterId } });
+    if (!requester || !ROLE_MANAGER_ROLES.includes(requester.role)) {
+      return res.status(403).json({ error: 'Недостаточно прав для смены ролей' });
+    }
+
+    // restaurant can't assign superadmin/support roles
+    if (requester.role === 'support' && role === 'superadmin') {
+      return res.status(403).json({ error: 'Тех. поддержка не может назначать главных админов' });
+    }
+
+    const targetUser = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!targetUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Can't change role of another superadmin (only superadmin themselves)
+    if (targetUser.role === 'superadmin' && requester.role !== 'superadmin') {
+      return res.status(403).json({ error: 'Нельзя изменить роль главного администратора' });
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: req.params.id },
+      data: { role },
+    });
+    res.json(serializeUser(updated));
+  } catch (error) {
+    console.error('Role update error:', error);
+    res.status(500).json({ error: 'Failed to update role' });
   }
 });
 

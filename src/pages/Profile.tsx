@@ -133,9 +133,15 @@ export const ProfilePage: React.FC = () => {
               {user?.firstName} {user?.lastName}
             </h1>
             <p className="text-sm text-zinc-400 font-medium">@{user?.username || 'user'}</p>
-            {isAdmin && (
-              <span className="mt-1 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-black uppercase px-2 py-0.5 rounded-full w-fit">
-                Администратор
+            {isAdmin && user?.role && (
+              <span className={cn(
+                "mt-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full w-fit",
+                user.role === 'superadmin' ? "bg-red-500/10 text-red-500" :
+                user.role === 'support' ? "bg-blue-500/10 text-blue-500" :
+                user.role === 'restaurant' ? "bg-green-500/10 text-green-500" :
+                "bg-zinc-900 dark:bg-white text-white dark:text-zinc-900"
+              )}>
+                {{ superadmin: 'Главный админ', support: 'Тех. поддержка', restaurant: 'Ресторан' }[user.role] || 'Админ'}
               </span>
             )}
           </div>
