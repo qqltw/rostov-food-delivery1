@@ -403,9 +403,13 @@ export const AdminPage: React.FC = () => {
                 const extraInfo = addressParts.slice(2).join(', '); // подъезд, комментарий и тд
                 const fullAddress = `Ростов-на-Дону, ${mainAddress}`;
                 const encodedAddr = encodeURIComponent(fullAddress);
-                // Яндекс Карты universal link — на мобильном предложит открыть в приложении Навигатор/Карты
-                const yandexNavUrl = `https://yandex.ru/maps/?rtext=~${encodedAddr}&rtt=auto`;
-                const yandexMapsUrl = `https://yandex.ru/maps/?text=${encodedAddr}`;
+                // build_route_on_map с текстовым адресом конечной точки
+                const yandexNavUrl = `intent://build_route_on_map?lat_to=47.2357&lon_to=39.7015&addr_to=${encodedAddr}#Intent;scheme=yandexnavi;package=ru.yandex.yandexnavi;end`;
+                const iosNavUrl = `yandexnavi://build_route_on_map?lat_to=47.2357&lon_to=39.7015&addr_to=${encodedAddr}`;
+                const yandexMapsUrl = `https://yandex.ru/maps/?rtext=~${encodedAddr}&rtt=auto`;
+                const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+                const isAndroid = /android/i.test(navigator.userAgent);
+                const navUrl = isAndroid ? yandexNavUrl : isIos ? iosNavUrl : yandexMapsUrl;
 
                 return (
                   <div key={order.id} className="bg-white dark:bg-zinc-900 p-6 rounded-[32px] border border-zinc-100 dark:border-zinc-800 flex flex-col gap-4">
@@ -446,7 +450,7 @@ export const AdminPage: React.FC = () => {
                     {order.deliveryType === 'delivery' && order.address !== 'Самовывоз' ? (
                       <div className="flex flex-col gap-1.5 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl p-3">
                         <a
-                          href={/android|iphone|ipad|ipod/i.test(navigator.userAgent) ? yandexNavUrl : yandexMapsUrl}
+                          href={navUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-start gap-2 text-sm font-bold text-blue-600 dark:text-blue-400 underline decoration-blue-300 dark:decoration-blue-700 underline-offset-2"
