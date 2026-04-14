@@ -401,7 +401,9 @@ export const AdminPage: React.FC = () => {
                 const addressParts = order.address.split(',').map((s: string) => s.trim());
                 const mainAddress = addressParts.slice(0, 2).join(', '); // улица + дом
                 const extraInfo = addressParts.slice(2).join(', '); // подъезд, комментарий и тд
-                const fullAddress = `Ростов-на-Дону, ${mainAddress}`;
+                // Чистый адрес для навигации: убираем "д.", "ул." и т.д.
+                const cleanAddress = mainAddress.replace(/\bд\.\s*/g, '').replace(/\bул\.\s*/g, '');
+                const fullAddress = `Ростов-на-Дону, ${cleanAddress}`;
                 const encodedAddr = encodeURIComponent(fullAddress);
                 const navUrl = `https://yandex.ru/maps/?rtext=~${encodedAddr}&rtt=auto`;
 
