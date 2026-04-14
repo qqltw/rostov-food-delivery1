@@ -404,8 +404,19 @@ export const AdminPage: React.FC = () => {
                 // Чистый адрес для навигации: убираем "д.", "ул." и т.д.
                 const cleanAddress = mainAddress.replace(/\bд\.\s*/g, '').replace(/\bул\.\s*/g, '');
                 const fullAddress = `Ростов-на-Дону, ${cleanAddress}`;
-                const encodedAddr = encodeURIComponent(fullAddress);
-                const navUrl = `https://yandex.ru/maps/?rtext=~${encodedAddr}&rtt=auto`;
+                const openNav = (e: React.MouseEvent) => {
+                  e.preventDefault();
+                  const url = `https://yandex.ru/maps/?mode=routes&rtext=~${encodeURIComponent(fullAddress)}&rtt=auto`;
+                  // Telegram WebApp
+                  if (window.Telegram?.WebApp?.openLink) {
+                    window.Telegram.WebApp.openLink(url);
+                  // MAX WebApp
+                  } else if ((window as any).WebApp?.openLink) {
+                    (window as any).WebApp.openLink(url);
+                  } else {
+                    window.open(url, '_blank');
+                  }
+                };
 
                 return (
                   <div key={order.id} className="bg-white dark:bg-zinc-900 p-6 rounded-[32px] border border-zinc-100 dark:border-zinc-800 flex flex-col gap-4">
@@ -445,15 +456,13 @@ export const AdminPage: React.FC = () => {
                     {/* Address */}
                     {order.deliveryType === 'delivery' && order.address !== 'Самовывоз' ? (
                       <div className="flex flex-col gap-1.5 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl p-3">
-                        <a
-                          href={navUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-start gap-2 text-sm font-bold text-blue-600 dark:text-blue-400 underline decoration-blue-300 dark:decoration-blue-700 underline-offset-2"
+                        <button
+                          onClick={openNav}
+                          className="flex items-start gap-2 text-sm font-bold text-blue-600 dark:text-blue-400 underline decoration-blue-300 dark:decoration-blue-700 underline-offset-2 text-left"
                         >
                           <MapPin size={16} className="shrink-0 mt-0.5" />
                           {mainAddress}
-                        </a>
+                        </button>
                         {extraInfo && (
                           <span className="text-[11px] text-zinc-500 dark:text-zinc-400 ml-6">{extraInfo}</span>
                         )}
