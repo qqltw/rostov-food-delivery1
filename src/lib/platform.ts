@@ -19,18 +19,15 @@ export interface PlatformUser {
 }
 
 export interface PlatformInfo {
-  platform: Platform;
+  platform: Platform | 'browser';
   webapp: any;
   user: PlatformUser | null;
   debug: string;
 }
 
-// Fallback Telegram ID for browser testing (admin ID)
-const DEV_FALLBACK_TG_ID = 1114947252;
-
 /**
  * Определяет платформу и извлекает данные пользователя.
- * Приоритет: Telegram > MAX > Dev fallback
+ * Приоритет: Telegram > MAX > browser (требуется логин/пароль)
  */
 export function detectPlatform(): PlatformInfo {
   let debug = '';
@@ -60,9 +57,7 @@ export function detectPlatform(): PlatformInfo {
   }
 
   // 2. Проверяем MAX (window.WebApp — глобальный объект MAX Bridge)
-  // MAX Bridge устанавливает window.WebApp напрямую (не через window.Telegram)
   const maxWebApp = window.WebApp;
-  // Отличаем MAX WebApp от случайного объекта: у MAX есть initDataUnsafe
   const isMaxWebApp = maxWebApp && !window.Telegram?.WebApp?.initDataUnsafe?.user && maxWebApp.initDataUnsafe;
   debug += `MAX WebApp exists: ${!!isMaxWebApp}\n`;
 
@@ -80,17 +75,12 @@ export function detectPlatform(): PlatformInfo {
     }
   }
 
-  // 3. Dev fallback — вне мессенджеров (для разработки)
-  debug += `→ Using DEV fallback user (telegram, id=${DEV_FALLBACK_TG_ID})\n`;
+  // 3. Обычный браузер — нужен вход по логину/паролю
+  debug += `→ Browser mode: login required\n`;
   return {
-    platform: 'telegram',
-    webapp: tgWebApp || null,
-    user: {
-      id: DEV_FALLBACK_TG_ID,
-      first_name: 'Dev',
-      last_name: 'User',
-      username: 'devuser',
-    },
+    platform: 'browser',
+    webapp: null,
+    user: null,
     debug,
   };
 }

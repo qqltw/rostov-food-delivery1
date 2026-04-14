@@ -68,10 +68,32 @@ function isAdminId(platform: string, platformId: bigint): boolean {
   return ADMIN_IDS[platform] === platformId;
 }
 
+// Password hashing helpers (built-in crypto, no extra deps)
+function hashPassword(password: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const salt = crypto.randomBytes(16).toString('hex');
+    crypto.scrypt(password, salt, 64, (err, derived) => {
+      if (err) return reject(err);
+      resolve(salt + ':' + derived.toString('hex'));
+    });
+  });
+}
+
+function verifyPassword(password: string, hash: string): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const [salt, key] = hash.split(':');
+    crypto.scrypt(password, salt, 64, (err, derived) => {
+      if (err) return reject(err);
+      resolve(derived.toString('hex') === key);
+    });
+  });
+}
+
 // Serialize user for JSON response (BigInt → string)
 function serializeUser(user: any) {
+  const { passwordHash, ...rest } = user;
   return {
-    ...user,
+    ...rest,
     platform: user.platform || 'telegram',
     platformId: (user.platformId ?? user.telegramId)?.toString(),
     telegramId: user.telegramId?.toString(),
@@ -169,8 +191,76 @@ app.post('/api/auth/platform', async (req, res) => {
 // Legacy auth endpoint — redirects to unified
 app.post('/api/auth/telegram', async (req, res) => {
   req.body.platform = 'telegram';
-  // Forward to the unified handler by re-dispatching
   res.redirect(307, '/api/auth/platform');
+});
+
+// Browser login by password
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { login, password } = req.body || {};
+    if (!login || !password) {
+      return res.status(400).json({ error: 'Введите логин и пароль' });
+    }
+
+    if (!process.env.DATABASE_URL) {
+      return res.status(503).json({ error: 'База данных недоступна' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { login } });
+    if (!user || !user.passwordHash) {
+      return res.status(401).json({ error: 'Неверный логин или пароль' });
+    }
+
+    const valid = await verifyPassword(password, user.passwordHash);
+    if (!valid) {
+      return res.status(401).json({ error: 'Неверный логин или пароль' });
+    }
+
+    res.json(serializeUser(user));
+  } catch (error: any) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Ошибка входа' });
+  }
+});
+
+// Register new browser account (or set password for existing user)
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { login, password, firstName, lastName } = req.body || {};
+    if (!login || !password) {
+      return res.status(400).json({ error: 'Введите логин и пароль' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Пароль минимум 6 символов' });
+    }
+
+    if (!process.env.DATABASE_URL) {
+      return res.status(503).json({ error: 'База данных недоступна' });
+    }
+
+    const existing = await prisma.user.findUnique({ where: { login } });
+    if (existing) {
+      return res.status(409).json({ error: 'Этот логин уже занят' });
+    }
+
+    const pwHash = await hashPassword(password);
+    const user = await prisma.user.create({
+      data: {
+        platform: 'browser',
+        platformId: BigInt(Date.now()), // unique ID for browser users
+        login,
+        passwordHash: pwHash,
+        firstName: firstName || login,
+        lastName: lastName || null,
+        role: 'user',
+      },
+    });
+
+    res.json(serializeUser(user));
+  } catch (error: any) {
+    console.error('Register error:', error);
+    res.status(500).json({ error: 'Ошибка регистрации' });
+  }
 });
 
 // Products

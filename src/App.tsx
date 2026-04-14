@@ -6,12 +6,13 @@ import { CatalogPage } from './pages/Catalog';
 import { CartPage } from './pages/Cart';
 import { ProfilePage } from './pages/Profile';
 import { AdminPage } from './pages/Admin';
+import { LoginPage } from './pages/Login';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const queryClient = new QueryClient();
 
 export default function App() {
-  const { init, isLoading, isAdmin, user, authError, debugInfo } = useAuth();
+  const { init, isLoading, isAdmin, user, authError, debugInfo, needsLogin } = useAuth();
   const [activeTab, setActiveTab] = useState('home');
 
   useEffect(() => {
@@ -34,6 +35,10 @@ export default function App() {
         </div>
       </div>
     );
+  }
+
+  if (needsLogin && !user) {
+    return <LoginPage />;
   }
 
   if (!user && authError) {

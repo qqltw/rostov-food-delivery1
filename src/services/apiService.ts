@@ -75,6 +75,20 @@ export const apiService = {
     return res.json();
   },
 
+  // Login by password (browser mode)
+  async loginPassword(login: string, password: string): Promise<User> {
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login, password }),
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(errText || 'Неверный логин или пароль');
+    }
+    return res.json();
+  },
+
   // Legacy: keep for backward compat
   async loginTelegram(tgData: any): Promise<User> {
     return this.loginPlatform({ platform: 'telegram', ...tgData });

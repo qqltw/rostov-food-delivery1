@@ -9,8 +9,11 @@ interface AuthState {
   isAdmin: boolean;
   authError: string | null;
   debugInfo: string;
+  needsLogin: boolean; // true when opened in browser (no messenger)
   setUser: (user: User | null) => void;
   init: () => Promise<void>;
+  loginByPassword: (login: string, password: string) => Promise<void>;
+  logout: () => void;
 }
 
 export const useAuth = create<AuthState>((set) => ({
@@ -19,15 +22,24 @@ export const useAuth = create<AuthState>((set) => ({
   isAdmin: false,
   authError: null,
   debugInfo: '',
+  needsLogin: false,
   setUser: (user) => set({ user, isAdmin: user?.role === 'admin' }),
+
   init: async () => {
-    set({ isLoading: true, authError: null });
+    set({ isLoading: true, authError: null, needsLogin: false });
 
     const { platform, user: platformUser, debug } = detectPlatform();
     let debugInfo = debug;
 
+    // Браузер — показываем форму входа
+    if (platform === 'browser') {
+      debugInfo += '→ Browser detected, login required\n';
+      set({ user: null, isAdmin: false, isLoading: false, needsLogin: true, debugInfo });
+      return;
+    }
+
     if (!platformUser) {
-      debugInfo += '✗ No user data available\n';
+      debugInfo += '✗ No user data from messenger\n';
       set({ user: null, isAdmin: false, isLoading: false, authError: 'Нет данных пользователя', debugInfo });
       return;
     }
@@ -59,5 +71,27 @@ export const useAuth = create<AuthState>((set) => ({
         debugInfo,
       });
     }
+  },
+
+  loginByPassword: async (login: string, password: string) => {
+    set({ isLoading: true, authError: null });
+    try {
+      const user = await apiService.loginPassword(login, password);
+      set({
+        user,
+        isAdmin: user.role === 'admin',
+        isLoading: false,
+        needsLogin: false,
+      });
+    } catch (error: any) {
+      set({
+        isLoading: false,
+        authError: error?.message || 'Неверный логин или пароль',
+      });
+    }
+  },
+
+  logout: () => {
+    set({ user: null, isAdmin: false, needsLogin: true, authError: null });
   },
 }));

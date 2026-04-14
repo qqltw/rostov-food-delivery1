@@ -6,7 +6,7 @@ export interface Address {
   leaveAtDoor: boolean;
 }
 
-export type Platform = 'telegram' | 'max';
+export type Platform = 'telegram' | 'max' | 'browser';
 
 export interface User {
   id: string;

@@ -21,6 +21,8 @@ model User {
   username    String?
   photoUrl    String?
   phone       String?
+  login       String?  @unique // для входа через браузер
+  passwordHash String? // bcrypt hash
   role        String   @default("user")
   addresses   Json     @default("[]")
   favorites   String[] @default([])
