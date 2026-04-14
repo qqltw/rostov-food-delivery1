@@ -469,57 +469,56 @@ export const AdminPage: React.FC = () => {
           ) : (
             <div className="flex flex-col gap-3">
               {users.map(user => (
-                <div key={user.id} className="bg-white dark:bg-zinc-900 p-4 rounded-3xl border border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-zinc-100 dark:bg-zinc-800 rounded-2xl flex items-center justify-center text-zinc-400 font-bold overflow-hidden">
+                <div key={user.id} className="bg-white dark:bg-zinc-900 p-4 rounded-3xl border border-zinc-100 dark:border-zinc-800 flex flex-col gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 shrink-0 bg-zinc-100 dark:bg-zinc-800 rounded-2xl flex items-center justify-center text-zinc-400 font-bold overflow-hidden">
                       {user.photoUrl ? (
                         <img src={user.photoUrl} alt="" className="w-full h-full object-cover" />
                       ) : (
                         (user.firstName || '?')[0]
                       )}
                     </div>
-                    <div className="flex flex-col">
-                      <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">
                         {user.firstName || 'Без имени'} {user.lastName || ''}
                       </span>
-                      <span className="text-xs text-zinc-400">{user.phone || 'Нет телефона'}</span>
+                      <span className="text-xs text-zinc-400 truncate">{user.phone || 'Нет телефона'}</span>
                       {user.username && (
-                        <span className="text-[10px] text-zinc-300 dark:text-zinc-600">@{user.username}</span>
+                        <span className="text-[10px] text-zinc-300 dark:text-zinc-600 truncate">@{user.username}</span>
                       )}
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
                     <span className={cn(
-                      "text-[10px] font-bold uppercase px-2 py-0.5 rounded-full",
-                      user.role === 'superadmin' ? "bg-red-500/10 text-red-500" :
+                      "ml-auto shrink-0 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full whitespace-nowrap",
+                      (user.role === 'superadmin' || user.role === 'admin') ? "bg-red-500/10 text-red-500" :
                       user.role === 'support' ? "bg-blue-500/10 text-blue-500" :
                       user.role === 'restaurant' ? "bg-green-500/10 text-green-500" :
-                      "text-zinc-400"
+                      "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"
                     )}>
                       {ROLE_LABELS[user.role] || user.role}
                     </span>
-                    {canManageRoles && currentUser?.id !== user.id && (
-                      <select
-                        value={user.role}
-                        onChange={async (e) => {
-                          try {
-                            await apiService.updateUserRole(user.id, e.target.value, currentUser!.id);
-                            setUsers(users.map(u => u.id === user.id ? { ...u, role: e.target.value as UserRole } : u));
-                          } catch (err: any) {
-                            alert(err.message || 'Ошибка смены роли');
-                          }
-                        }}
-                        className="text-[10px] bg-zinc-100 dark:bg-zinc-800 rounded-lg px-1.5 py-0.5 text-zinc-600 dark:text-zinc-300 outline-none"
-                      >
-                        <option value="user">Клиент</option>
-                        <option value="restaurant">Ресторан</option>
-                        <option value="support">Тех. поддержка</option>
-                        {(currentUser?.role === 'superadmin' || currentUser?.role === 'admin') && (
-                          <option value="superadmin">Главный админ</option>
-                        )}
-                      </select>
-                    )}
                   </div>
+                  {canManageRoles && currentUser?.id !== user.id && (
+                    <select
+                      value={user.role}
+                      onChange={async (e) => {
+                        const newRole = e.target.value as UserRole;
+                        try {
+                          await apiService.updateUserRole(user.id, newRole, currentUser!.id);
+                          setUsers(prev => prev.map(u => u.id === user.id ? { ...u, role: newRole } : u));
+                        } catch (err: any) {
+                          alert(err.message || 'Ошибка смены роли');
+                        }
+                      }}
+                      className="w-full text-xs bg-zinc-100 dark:bg-zinc-800 rounded-xl px-3 py-2 text-zinc-700 dark:text-zinc-300 outline-none focus:ring-2 focus:ring-orange-500"
+                    >
+                      <option value="user">Клиент</option>
+                      <option value="restaurant">Ресторан</option>
+                      <option value="support">Тех. поддержка</option>
+                      {(currentUser?.role === 'superadmin' || currentUser?.role === 'admin') && (
+                        <option value="superadmin">Главный админ</option>
+                      )}
+                    </select>
+                  )}
                 </div>
               ))}
             </div>
