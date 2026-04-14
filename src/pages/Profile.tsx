@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User as UserIcon, MapPin, History, Settings, LogOut, ChevronRight, Package, Clock, X, Plus, Heart, Trash2 } from 'lucide-react';
+import { User as UserIcon, MapPin, History, Settings, LogOut, ChevronRight, Package, Clock, X, Plus, Heart, Trash2, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { apiService } from '../services/apiService';
 import { Order, Product, Address } from '../types';
@@ -21,6 +21,7 @@ export const ProfilePage: React.FC = () => {
   const [isUpdating, setIsUpdating] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [showAllOrders, setShowAllOrders] = useState(false);
 
   // Address form state
   const [addressForm, setAddressForm] = useState<Address>({
@@ -146,11 +147,11 @@ export const ProfilePage: React.FC = () => {
             )}
           </div>
         </div>
-        <button 
+        <button
           onClick={toggleDarkMode}
-          className="p-3 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 text-zinc-500"
+          className="p-3 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 text-zinc-500 hover:text-orange-500 active:scale-95 transition-all"
         >
-          {isDarkMode ? <Settings className="animate-spin-slow" /> : <Settings />}
+          {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
         </button>
       </div>
 
@@ -166,7 +167,15 @@ export const ProfilePage: React.FC = () => {
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-100">История заказов</h2>
-          <History size={20} className="text-zinc-400" />
+          {orders.length > 3 && (
+            <button
+              onClick={() => setShowAllOrders(!showAllOrders)}
+              className="text-xs font-bold text-orange-500 flex items-center gap-1 active:scale-95 transition-transform"
+            >
+              {showAllOrders ? 'Свернуть' : `Все (${orders.length})`}
+              <ChevronRight size={14} className={cn("transition-transform", showAllOrders && "rotate-90")} />
+            </button>
+          )}
         </div>
 
         {isLoading ? (
@@ -175,7 +184,7 @@ export const ProfilePage: React.FC = () => {
           </div>
         ) : orders.length > 0 ? (
           <div className="flex flex-col gap-4">
-            {orders.map((order) => (
+            {(showAllOrders ? orders : orders.slice(0, 3)).map((order) => (
               <button
                 key={order.id}
                 onClick={() => setSelectedOrder(order)}
