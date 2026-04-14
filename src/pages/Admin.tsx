@@ -401,8 +401,11 @@ export const AdminPage: React.FC = () => {
                 const addressParts = order.address.split(',').map((s: string) => s.trim());
                 const mainAddress = addressParts.slice(0, 2).join(', '); // улица + дом
                 const extraInfo = addressParts.slice(2).join(', '); // подъезд, комментарий и тд
-                const yandexNavUrl = `yandexnavi://build_route_on_map?lat_to=&lon_to=&app=yandexnavi&context=addr&addr=${encodeURIComponent(order.address)}`;
-                const yandexMapsUrl = `https://yandex.ru/maps/?text=${encodeURIComponent(order.address)}`;
+                const fullAddress = `Ростов-на-Дону, ${mainAddress}`;
+                const encodedAddr = encodeURIComponent(fullAddress);
+                // Яндекс Карты universal link — на мобильном предложит открыть в приложении Навигатор/Карты
+                const yandexNavUrl = `https://yandex.ru/maps/?rtext=~${encodedAddr}&rtt=auto`;
+                const yandexMapsUrl = `https://yandex.ru/maps/?text=${encodedAddr}`;
 
                 return (
                   <div key={order.id} className="bg-white dark:bg-zinc-900 p-6 rounded-[32px] border border-zinc-100 dark:border-zinc-800 flex flex-col gap-4">
