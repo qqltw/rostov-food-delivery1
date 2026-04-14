@@ -402,12 +402,12 @@ export const AdminPage: React.FC = () => {
                 // Город + улица + дом (первые 3 части)
                 const mainAddress = addressParts.slice(0, 3).join(', ');
                 const extraInfo = addressParts.slice(3).join(', ');
-                // Для навигации: город + улица + номер (без "д.", "ул.")
-                const navAddress = addressParts.slice(0, 3).join(' ').replace(/\bд\.\s*/g, '').replace(/\bул\.\s*/g, '').replace(/\s+/g, ' ').trim();
+                // Для навигации: город, улица, дом (без "д.", "ул.", "под." и тд)
+                const navParts = addressParts.slice(0, 3).map(p => p.replace(/^д\.\s*/, '').replace(/^ул\.\s*/, ''));
+                const navAddress = navParts.join(', ');
                 const openNav = (e: React.MouseEvent) => {
                   e.preventDefault();
-                  const url = 'https://yandex.ru/maps/?rtext=~' + navAddress.replace(/ /g, '+') + '&rtt=auto';
-                  window.open(url, '_blank');
+                  window.location.href = 'https://yandex.ru/maps/?text=' + encodeURIComponent(navAddress);
                 };
 
                 return (
