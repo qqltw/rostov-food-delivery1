@@ -61,18 +61,23 @@ export const apiService = {
     return res.json();
   },
 
-  // Auth
-  async loginTelegram(tgData: any): Promise<User> {
-    const res = await fetch(`${API_BASE}/auth/telegram`, {
+  // Auth (unified for Telegram + MAX)
+  async loginPlatform(data: { platform: string; id: number; first_name: string; last_name?: string; username?: string; photo_url?: string }): Promise<User> {
+    const res = await fetch(`${API_BASE}/auth/platform`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(tgData),
+      body: JSON.stringify(data),
     });
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
       throw new Error(`Auth failed (${res.status}): ${errText.slice(0, 200)}`);
     }
     return res.json();
+  },
+
+  // Legacy: keep for backward compat
+  async loginTelegram(tgData: any): Promise<User> {
+    return this.loginPlatform({ platform: 'telegram', ...tgData });
   },
 
   // Admin

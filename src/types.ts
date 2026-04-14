@@ -6,9 +6,13 @@ export interface Address {
   leaveAtDoor: boolean;
 }
 
+export type Platform = 'telegram' | 'max';
+
 export interface User {
   id: string;
-  telegramId: string;
+  platform: Platform;
+  platformId: string;
+  telegramId?: string; // deprecated, use platformId
   firstName: string;
   lastName?: string;
   username?: string;

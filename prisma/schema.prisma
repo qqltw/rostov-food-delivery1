@@ -13,7 +13,9 @@ datasource db {
 
 model User {
   id          String   @id @default(uuid())
-  telegramId  BigInt   @unique
+  platform    String   @default("telegram") // "telegram" | "max"
+  platformId  BigInt                         // ID пользователя на платформе
+  telegramId  BigInt?                        // deprecated, kept for migration compatibility
   firstName   String
   lastName    String?
   username    String?
@@ -25,6 +27,8 @@ model User {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   orders      Order[]
+
+  @@unique([platform, platformId])
 }
 
 model Category {

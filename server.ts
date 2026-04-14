@@ -58,8 +58,25 @@ async function isDbConnected() {
   }
 }
 
-// Admin ID from Telegram
-const MAIN_ADMIN_TG_ID = 1114947252n;
+// Admin IDs per platform
+const ADMIN_IDS: Record<string, bigint> = {
+  telegram: 1114947252n,
+  // max: 123456789n, // TODO: установите ваш MAX admin ID
+};
+
+function isAdminId(platform: string, platformId: bigint): boolean {
+  return ADMIN_IDS[platform] === platformId;
+}
+
+// Serialize user for JSON response (BigInt → string)
+function serializeUser(user: any) {
+  return {
+    ...user,
+    platform: user.platform || 'telegram',
+    platformId: (user.platformId ?? user.telegramId)?.toString(),
+    telegramId: user.telegramId?.toString(),
+  };
+}
 
 // API Routes
 app.get('/api/health', async (req, res) => {
@@ -70,26 +87,31 @@ app.get('/api/health', async (req, res) => {
   });
 });
 
-// Auth / User
-app.post('/api/auth/telegram', async (req, res) => {
+// Auth / User — unified endpoint for Telegram + MAX
+app.post('/api/auth/platform', async (req, res) => {
   try {
-    const { id, first_name, last_name, username, photo_url } = req.body || {};
+    const { platform = 'telegram', id, first_name, last_name, username, photo_url } = req.body || {};
 
-    if (!id) return res.status(400).json({ error: 'Missing Telegram ID' });
+    if (!id) return res.status(400).json({ error: 'Missing user ID' });
+    if (!['telegram', 'max'].includes(platform)) {
+      return res.status(400).json({ error: 'Invalid platform. Use "telegram" or "max"' });
+    }
 
-    const tgId = BigInt(id);
+    const platformId = BigInt(id);
 
     // Fallback: if no DATABASE_URL at all, return a mock user so the UI still works
     if (!process.env.DATABASE_URL) {
       return res.json({
         id: 'mock-' + id,
-        telegramId: String(id),
+        platform,
+        platformId: String(id),
+        telegramId: platform === 'telegram' ? String(id) : null,
         firstName: first_name || 'Guest',
         lastName: last_name || null,
         username: username || null,
         photoUrl: photo_url || null,
         phone: null,
-        role: tgId === MAIN_ADMIN_TG_ID ? 'admin' : 'user',
+        role: isAdminId(platform, platformId) ? 'admin' : 'user',
         addresses: [],
         favorites: [],
       });
@@ -97,7 +119,9 @@ app.post('/api/auth/telegram', async (req, res) => {
 
     let user;
     try {
-      user = await prisma.user.findUnique({ where: { telegramId: tgId } });
+      user = await prisma.user.findUnique({
+        where: { platform_platformId: { platform, platformId } },
+      });
     } catch (dbErr: any) {
       console.error('DB connection/query failed:', dbErr);
       return res.status(500).json({
@@ -109,31 +133,30 @@ app.post('/api/auth/telegram', async (req, res) => {
     if (!user) {
       user = await prisma.user.create({
         data: {
-          telegramId: tgId,
+          platform,
+          platformId,
+          telegramId: platform === 'telegram' ? platformId : null,
           firstName: first_name,
           lastName: last_name,
           username,
           photoUrl: photo_url,
-          role: tgId === MAIN_ADMIN_TG_ID ? 'admin' : 'user',
+          role: isAdminId(platform, platformId) ? 'admin' : 'user',
         },
       });
     } else {
       user = await prisma.user.update({
-        where: { telegramId: tgId },
+        where: { platform_platformId: { platform, platformId } },
         data: {
           firstName: first_name,
           lastName: last_name,
           username,
           photoUrl: photo_url,
-          role: tgId === MAIN_ADMIN_TG_ID ? 'admin' : user.role,
+          role: isAdminId(platform, platformId) ? 'admin' : user.role,
         },
       });
     }
 
-    res.json({
-      ...user,
-      telegramId: user.telegramId.toString(),
-    });
+    res.json(serializeUser(user));
   } catch (error: any) {
     console.error('Auth error:', error);
     res.status(500).json({
@@ -141,6 +164,13 @@ app.post('/api/auth/telegram', async (req, res) => {
       message: error?.message || String(error),
     });
   }
+});
+
+// Legacy auth endpoint — redirects to unified
+app.post('/api/auth/telegram', async (req, res) => {
+  req.body.platform = 'telegram';
+  // Forward to the unified handler by re-dispatching
+  res.redirect(307, '/api/auth/platform');
 });
 
 // Products
@@ -295,6 +325,8 @@ app.patch('/api/user/profile', async (req, res) => {
         phone,
         addresses,
         favorites,
+        platform: 'telegram',
+        platformId: '123456789',
         telegramId: '123456789',
         firstName: 'Mock',
         role: 'user'
@@ -308,11 +340,8 @@ app.patch('/api/user/profile', async (req, res) => {
         favorites: favorites !== undefined ? favorites : undefined,
       },
     });
-    
-    res.json({
-      ...user,
-      telegramId: user.telegramId.toString(),
-    });
+
+    res.json(serializeUser(user));
   } catch (error) {
     console.error('Profile update error:', error);
     res.status(500).json({ error: 'Failed to update profile' });
@@ -325,37 +354,33 @@ app.post('/api/user/favorites/toggle', async (req, res) => {
   
   try {
     if (!(await isDbConnected())) {
-      // Mock Toggle Favorite
-      // In demo mode, we just return a mock user with the updated favorites
-      // The frontend state will handle the actual persistence for the session
       return res.json({
         id: userId,
+        platform: 'telegram',
+        platformId: '123456789',
         telegramId: '123456789',
         firstName: 'Mock',
         role: 'user',
         addresses: [],
-        favorites: [productId], // This is a simplification, but enough for demo
+        favorites: [productId],
       });
     }
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) return res.status(404).json({ error: 'User not found' });
-    
+
     let favorites = [...user.favorites];
     if (favorites.includes(productId)) {
       favorites = favorites.filter(id => id !== productId);
     } else {
       favorites.push(productId);
     }
-    
+
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: { favorites },
     });
-    
-    res.json({
-      ...updatedUser,
-      telegramId: updatedUser.telegramId.toString(),
-    });
+
+    res.json(serializeUser(updatedUser));
   } catch (error) {
     res.status(500).json({ error: 'Failed to toggle favorite' });
   }
@@ -402,10 +427,7 @@ app.get('/api/admin/orders', async (req, res) => {
     // Convert BigInt to string for JSON
     const sanitizedOrders = orders.map(o => ({
       ...o,
-      user: {
-        ...o.user,
-        telegramId: o.user.telegramId.toString(),
-      }
+      user: serializeUser(o.user),
     }));
     res.json(sanitizedOrders);
   } catch (error) {
@@ -434,10 +456,7 @@ app.get('/api/admin/users', async (req, res) => {
     const users = await prisma.user.findMany({
       orderBy: { createdAt: 'desc' },
     });
-    const sanitizedUsers = users.map(u => ({
-      ...u,
-      telegramId: u.telegramId.toString(),
-    }));
+    const sanitizedUsers = users.map(u => serializeUser(u));
     res.json(sanitizedUsers);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch users' });
