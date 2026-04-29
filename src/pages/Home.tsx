@@ -55,7 +55,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCategory }) => {
           <img
             src={COMPANY_LOGO_SRC}
             alt="Машенькин счастье"
-            className="h-9 w-auto max-w-[180px] object-contain object-left"
+            className="h-14 w-auto max-w-[240px] object-contain object-left"
           />
           <div className="flex items-center gap-1">
             <MapPin size={14} className="text-orange-500" />
