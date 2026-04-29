@@ -422,6 +422,13 @@ app.post('/api/orders', async (req, res) => {
       return res.status(400).json({ error: 'Пользователь не найден. Перезайдите в приложение.' });
     }
 
+    if (!user.phone && phone) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { phone },
+      });
+    }
+
     // Check which products actually exist (productId is now optional on OrderItem)
     const productIds = items.map((item: any) => item.productId).filter(Boolean);
     const existingProducts = productIds.length > 0

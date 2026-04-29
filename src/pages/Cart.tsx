@@ -12,7 +12,7 @@ type PaymentType = 'cash' | 'card' | 'online';
 
 export const CartPage: React.FC = () => {
   const { items, totalAmount, updateQuantity, removeItem, clearCart } = useCart();
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [deliveryType, setDeliveryType] = useState<'delivery' | 'pickup'>('delivery');
   const [paymentType, setPaymentType] = useState<PaymentType>('cash');
@@ -185,6 +185,16 @@ export const CartPage: React.FC = () => {
             leaveAtDoor: false,
           });
 
+    const formattedPhone = formatPhoneNumber(phone);
+    if (!user.phone && formattedPhone) {
+      try {
+        const updatedUser = await apiService.updateProfile(user.id, { phone: formattedPhone });
+        setUser(updatedUser);
+      } catch (error) {
+        console.error('Failed to save first phone number:', error);
+      }
+    }
+
     const orderData = {
       userId: user.id,
       items: items.map(i => ({
@@ -199,7 +209,7 @@ export const CartPage: React.FC = () => {
       discount: discountAmount,
       promoCode: appliedPromo?.code,
       address: finalAddress,
-      phone,
+      phone: formattedPhone,
       comment,
       name: user.firstName,
       deliveryType,
