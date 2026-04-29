@@ -346,6 +346,23 @@ app.get('/api/banners', async (req, res) => {
   }
 });
 
+// Notifications
+app.get('/api/notifications', async (req, res) => {
+  try {
+    if (!(await isDbConnected())) {
+      return res.json([]);
+    }
+    const notifications = await prisma.notification.findMany({
+      where: { isActive: true },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+    res.json(notifications);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch notifications' });
+  }
+});
+
 // Promo codes
 app.post('/api/promo-codes/validate', async (req, res) => {
   const { code, subtotal } = req.body;
@@ -922,6 +939,62 @@ app.delete('/api/admin/promo-codes/:id', async (req, res) => {
   }
 });
 
+// Admin Notifications
+app.get('/api/admin/notifications', async (req, res) => {
+  try {
+    if (!(await isDbConnected())) {
+      return res.json([]);
+    }
+    const notifications = await prisma.notification.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+    res.json(notifications);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch notifications' });
+  }
+});
+
+app.post('/api/admin/notifications', async (req, res) => {
+  const { title, message, isActive } = req.body;
+  if (!title?.trim() || !message?.trim()) {
+    return res.status(400).json({ error: 'Title and message are required' });
+  }
+
+  try {
+    if (!(await isDbConnected())) {
+      return res.json({
+        id: 'mock-notification-' + Date.now(),
+        title: title.trim(),
+        message: message.trim(),
+        isActive: isActive !== false,
+        createdAt: new Date().toISOString(),
+      });
+    }
+    const notification = await prisma.notification.create({
+      data: {
+        title: title.trim(),
+        message: message.trim(),
+        isActive: isActive !== false,
+      },
+    });
+    res.json(notification);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create notification' });
+  }
+});
+
+app.delete('/api/admin/notifications/:id', async (req, res) => {
+  try {
+    await prisma.notification.delete({
+      where: { id: req.params.id },
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete notification' });
+  }
+});
+
 // =============================================
 // YooKassa Payment Integration
 // =============================================
@@ -1481,6 +1554,7 @@ app.post('/api/dev/seed', async (req, res) => {
     await prisma.category.deleteMany();
     await prisma.banner.deleteMany();
     await prisma.promoCode.deleteMany();
+    await prisma.notification.deleteMany();
 
     // Seed Categories
     const categories = [
@@ -1615,6 +1689,14 @@ app.post('/api/dev/seed', async (req, res) => {
         discountType: 'percent',
         value: 20,
         minOrderAmount: 0,
+        isActive: true,
+      },
+    });
+
+    await prisma.notification.create({
+      data: {
+        title: 'Добро пожаловать',
+        message: 'Следите здесь за акциями, новостями доставки и важными объявлениями.',
         isActive: true,
       },
     });

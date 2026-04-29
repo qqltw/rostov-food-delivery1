@@ -124,8 +124,9 @@ export const BannerModal: React.FC<BannerModalProps> = ({ isOpen, onClose, onSav
                   <label className="text-xs font-bold text-zinc-500 uppercase">Порядок сортировки</label>
                   <input
                     type="number"
-                    value={formData.sortOrder}
-                    onChange={e => setFormData({ ...formData, sortOrder: Number(e.target.value) })}
+                    value={formData.sortOrder || ''}
+                    onChange={e => setFormData({ ...formData, sortOrder: e.target.value ? Number(e.target.value) : 0 })}
+                    placeholder="Чем меньше число, тем выше баннер"
                     className={inputClass}
                   />
                 </div>

@@ -1,4 +1,4 @@
-import { Product, Category, Banner, Order, User, DeliveryEstimate, PaymentResult, PromoCode } from '../types';
+import { Product, Category, Banner, Order, User, DeliveryEstimate, PaymentResult, PromoCode, Notification } from '../types';
 
 const API_BASE = '/api';
 
@@ -21,6 +21,12 @@ export const apiService = {
   async getBanners(): Promise<Banner[]> {
     const res = await fetch(`${API_BASE}/banners`);
     if (!res.ok) throw new Error('Failed to fetch banners');
+    return res.json();
+  },
+
+  async getNotifications(): Promise<Notification[]> {
+    const res = await fetch(`${API_BASE}/notifications`);
+    if (!res.ok) throw new Error('Failed to fetch notifications');
     return res.json();
   },
 
@@ -283,6 +289,30 @@ export const apiService = {
       method: 'DELETE',
     });
     if (!res.ok) throw new Error('Failed to delete promo code');
+  },
+
+  // Admin Notifications
+  async getAdminNotifications(): Promise<Notification[]> {
+    const res = await fetch(`${API_BASE}/admin/notifications`);
+    if (!res.ok) throw new Error('Failed to fetch notifications');
+    return res.json();
+  },
+
+  async createNotification(data: { title: string; message: string; isActive?: boolean }): Promise<Notification> {
+    const res = await fetch(`${API_BASE}/admin/notifications`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to create notification');
+    return res.json();
+  },
+
+  async deleteNotification(id: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/admin/notifications/${id}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete notification');
   },
 
   // Payments (YooKassa)

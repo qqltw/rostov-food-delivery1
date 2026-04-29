@@ -136,6 +136,14 @@ export interface PromoCode {
   expiryDate?: string | null;
 }
 
+export interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
 export interface Banner {
   id: string;
   title: string;

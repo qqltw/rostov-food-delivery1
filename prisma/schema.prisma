@@ -124,3 +124,11 @@ model PromoCode {
   isActive       Boolean   @default(true)
   expiryDate     DateTime?
 }
+
+model Notification {
+  id        String   @id @default(uuid())
+  title     String
+  message   String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}

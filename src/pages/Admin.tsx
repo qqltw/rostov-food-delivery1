@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { LayoutDashboard, Package, ShoppingBag, Users, Plus, Edit2, Trash2, FolderTree, Image, Database, ChevronRight, CreditCard, Banknote, Wallet, MapPin, Truck, Check, TicketPercent } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingBag, Users, Plus, Edit2, Trash2, FolderTree, Image, Database, ChevronRight, CreditCard, Banknote, Wallet, MapPin, Truck, Check, TicketPercent, Bell, Send } from 'lucide-react';
 import { apiService } from '../services/apiService';
-import { Product, Order, Category, User, Banner, PromoCode, ROLE_LABELS, UserRole, ADMIN_ROLES } from '../types';
+import { Product, Order, Category, User, Banner, PromoCode, Notification as AppNotification, ROLE_LABELS, UserRole, ADMIN_ROLES } from '../types';
 import { formatPrice, cn } from '../lib/utils';
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from '../constants';
 import { Button } from '../components/Button';
@@ -11,15 +11,25 @@ import { BannerModal } from '../components/admin/BannerModal';
 import { OrderDetailsModal } from '../components/OrderDetailsModal';
 import { useAuth } from '../hooks/useAuth';
 
-type AdminTab = 'dashboard' | 'products' | 'categories' | 'orders' | 'users' | 'banners' | 'promoCodes';
+type AdminTab = 'dashboard' | 'products' | 'categories' | 'orders' | 'users' | 'banners' | 'promoCodes' | 'notifications';
 
-const emptyPromoForm: Omit<PromoCode, 'id'> = {
+type PromoForm = Omit<PromoCode, 'id' | 'value' | 'minOrderAmount'> & {
+  value: string;
+  minOrderAmount: string;
+};
+
+const emptyPromoForm: PromoForm = {
   code: '',
   discountType: 'percent',
-  value: 10,
-  minOrderAmount: 0,
+  value: '',
+  minOrderAmount: '',
   isActive: true,
   expiryDate: null,
+};
+
+const emptyNotificationForm = {
+  title: '',
+  message: '',
 };
 
 // Группировка заказов по дням
@@ -54,6 +64,7 @@ export const AdminPage: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [banners, setBanners] = useState<Banner[]>([]);
   const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -65,7 +76,9 @@ export const AdminPage: React.FC = () => {
   const [isBannerModalOpen, setIsBannerModalOpen] = useState(false);
   const [editingBanner, setEditingBanner] = useState<Banner | null>(null);
   const [editingPromoCode, setEditingPromoCode] = useState<PromoCode | null>(null);
-  const [promoForm, setPromoForm] = useState<Omit<PromoCode, 'id'>>(emptyPromoForm);
+  const [promoForm, setPromoForm] = useState<PromoForm>(emptyPromoForm);
+  const [notificationForm, setNotificationForm] = useState(emptyNotificationForm);
+  const [isSendingNotification, setIsSendingNotification] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
@@ -80,7 +93,7 @@ export const AdminPage: React.FC = () => {
         const o = await apiService.getCourierOrders(currentUser.id).catch(() => []);
         setOrders(o);
       } else {
-        const [p, c, o, u, s, b, promo] = await Promise.all([
+        const [p, c, o, u, s, b, promo, notificationItems] = await Promise.all([
           apiService.getProducts().catch(() => []),
           apiService.getCategories().catch(() => []),
           apiService.getAdminOrders().catch(() => []),
@@ -88,6 +101,7 @@ export const AdminPage: React.FC = () => {
           apiService.getAdminStats().catch(() => ({ orderCount: 0, revenue: 0, userCount: 0, productCount: 0 })),
           apiService.getAdminBanners().catch(() => []),
           apiService.getAdminPromoCodes().catch(() => []),
+          apiService.getAdminNotifications().catch(() => []),
         ]);
         setProducts(p);
         setCategories(c);
@@ -96,6 +110,7 @@ export const AdminPage: React.FC = () => {
         setStats(s);
         setBanners(b);
         setPromoCodes(promo);
+        setNotifications(notificationItems);
       }
     } catch (error) {
       console.error('Failed to fetch admin data:', error);
@@ -216,8 +231,8 @@ export const AdminPage: React.FC = () => {
     setPromoForm({
       code: promoCode.code,
       discountType: promoCode.discountType,
-      value: promoCode.value,
-      minOrderAmount: promoCode.minOrderAmount,
+      value: String(promoCode.value),
+      minOrderAmount: promoCode.minOrderAmount ? String(promoCode.minOrderAmount) : '',
       isActive: promoCode.isActive,
       expiryDate: promoCode.expiryDate ? promoCode.expiryDate.slice(0, 10) : null,
     });
@@ -226,7 +241,12 @@ export const AdminPage: React.FC = () => {
   const handleSavePromoCode = async () => {
     if (!promoForm.code.trim()) return;
     try {
-      const payload = { ...promoForm, code: promoForm.code.trim().toUpperCase() };
+      const payload: Omit<PromoCode, 'id'> = {
+        ...promoForm,
+        code: promoForm.code.trim().toUpperCase(),
+        value: Number(promoForm.value || 0),
+        minOrderAmount: Number(promoForm.minOrderAmount || 0),
+      };
       if (editingPromoCode) {
         await apiService.updatePromoCode(editingPromoCode.id, payload);
       } else {
@@ -246,6 +266,34 @@ export const AdminPage: React.FC = () => {
       fetchData();
     } catch (error) {
       console.error('Failed to delete promo code:', error);
+    }
+  };
+
+  const handleSendNotification = async () => {
+    if (!notificationForm.title.trim() || !notificationForm.message.trim()) return;
+    setIsSendingNotification(true);
+    try {
+      await apiService.createNotification({
+        title: notificationForm.title.trim(),
+        message: notificationForm.message.trim(),
+        isActive: true,
+      });
+      setNotificationForm(emptyNotificationForm);
+      fetchData();
+    } catch (error) {
+      console.error('Failed to send notification:', error);
+    } finally {
+      setIsSendingNotification(false);
+    }
+  };
+
+  const handleDeleteNotification = async (id: string) => {
+    if (!window.confirm('Удалить уведомление?')) return;
+    try {
+      await apiService.deleteNotification(id);
+      fetchData();
+    } catch (error) {
+      console.error('Failed to delete notification:', error);
     }
   };
 
@@ -275,6 +323,7 @@ export const AdminPage: React.FC = () => {
     { id: 'categories', label: 'Категории', icon: FolderTree },
     { id: 'banners', label: 'Баннеры', icon: Image },
     { id: 'promoCodes', label: 'Промокоды', icon: TicketPercent },
+    { id: 'notifications', label: 'Уведомления', icon: Bell },
     { id: 'orders', label: 'Заказы', icon: ShoppingBag },
     { id: 'users', label: 'Клиенты', icon: Users },
   ];
@@ -657,16 +706,16 @@ export const AdminPage: React.FC = () => {
                 type="number"
                 min="0"
                 value={promoForm.value}
-                onChange={(e) => setPromoForm(prev => ({ ...prev, value: Number(e.target.value) }))}
-                placeholder="Скидка"
+                onChange={(e) => setPromoForm(prev => ({ ...prev, value: e.target.value }))}
+                placeholder={promoForm.discountType === 'percent' ? 'Например: 20' : 'Например: 300'}
                 className="h-12 px-4 bg-zinc-50 dark:bg-zinc-800 rounded-2xl text-sm font-bold text-zinc-900 dark:text-zinc-100 outline-none"
               />
               <input
                 type="number"
                 min="0"
                 value={promoForm.minOrderAmount}
-                onChange={(e) => setPromoForm(prev => ({ ...prev, minOrderAmount: Number(e.target.value) }))}
-                placeholder="Мин. заказ"
+                onChange={(e) => setPromoForm(prev => ({ ...prev, minOrderAmount: e.target.value }))}
+                placeholder="Минимальная сумма заказа"
                 className="h-12 px-4 bg-zinc-50 dark:bg-zinc-800 rounded-2xl text-sm font-bold text-zinc-900 dark:text-zinc-100 outline-none"
               />
               <input
@@ -722,6 +771,69 @@ export const AdminPage: React.FC = () => {
                       <Trash2 size={16} />
                     </button>
                   </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Notifications */}
+      {activeTab === 'notifications' && (
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-100">Уведомления</h2>
+          </div>
+
+          <div className="bg-white dark:bg-zinc-900 p-4 rounded-3xl border border-zinc-100 dark:border-zinc-800 flex flex-col gap-3">
+            <input
+              value={notificationForm.title}
+              onChange={(e) => setNotificationForm(prev => ({ ...prev, title: e.target.value }))}
+              placeholder="Заголовок уведомления"
+              className="h-12 px-4 bg-zinc-50 dark:bg-zinc-800 rounded-2xl text-sm font-bold text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none"
+            />
+            <textarea
+              value={notificationForm.message}
+              onChange={(e) => setNotificationForm(prev => ({ ...prev, message: e.target.value }))}
+              placeholder="Текст, который увидят все пользователи"
+              className="h-28 p-4 bg-zinc-50 dark:bg-zinc-800 rounded-2xl text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none resize-none"
+            />
+            <Button
+              size="sm"
+              className="rounded-xl"
+              onClick={handleSendNotification}
+              isLoading={isSendingNotification}
+              disabled={!notificationForm.title.trim() || !notificationForm.message.trim()}
+            >
+              <Send size={16} /> Отправить всем
+            </Button>
+          </div>
+
+          {notifications.length === 0 ? (
+            <div className="py-12 bg-white dark:bg-zinc-900 rounded-[32px] border border-zinc-100 dark:border-zinc-800 flex flex-col items-center justify-center text-center gap-2">
+              <Bell size={32} className="text-zinc-300" />
+              <p className="text-sm text-zinc-400 font-medium">Уведомлений пока нет</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {notifications.map(notification => (
+                <div key={notification.id} className="bg-white dark:bg-zinc-900 p-4 rounded-3xl border border-zinc-100 dark:border-zinc-800 flex items-start justify-between gap-4">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-black text-zinc-900 dark:text-zinc-100">{notification.title}</span>
+                      {!notification.isActive && <span className="text-[10px] text-red-500 font-bold uppercase">выключено</span>}
+                    </div>
+                    <span className="text-sm text-zinc-500 dark:text-zinc-400">{notification.message}</span>
+                    <span className="text-[10px] text-zinc-400 font-bold">
+                      {new Date(notification.createdAt).toLocaleString('ru-RU')}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteNotification(notification.id)}
+                    className="p-2 text-zinc-400 hover:text-red-500"
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </div>
               ))}
             </div>

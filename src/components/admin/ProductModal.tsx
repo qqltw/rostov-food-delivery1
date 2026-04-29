@@ -200,8 +200,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
                       required
                       type="number"
                       min={0}
-                      value={formData.price}
-                      onChange={e => setFormData({ ...formData, price: Number(e.target.value) })}
+                      value={formData.price || ''}
+                      onChange={e => setFormData({ ...formData, price: e.target.value ? Number(e.target.value) : 0 })}
+                      placeholder="Цена в рублях"
                       className={inputClass}
                     />
                   </div>
@@ -212,7 +213,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
                       min={0}
                       value={formData.oldPrice || ''}
                       onChange={e => setFormData({ ...formData, oldPrice: e.target.value ? Number(e.target.value) : null })}
-                      placeholder="—"
+                      placeholder="Если есть скидка"
                       className={inputClass}
                     />
                   </div>
@@ -252,8 +253,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
                     <input
                       type="number"
                       min={0}
-                      value={formData.kcal}
-                      onChange={e => setFormData({ ...formData, kcal: Number(e.target.value) })}
+                      value={formData.kcal || ''}
+                      onChange={e => setFormData({ ...formData, kcal: e.target.value ? Number(e.target.value) : 0 })}
+                      placeholder="ккал"
                       className={inputClass}
                     />
                   </div>
@@ -262,8 +264,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
                     <input
                       type="number"
                       min={0}
-                      value={formData.proteins}
-                      onChange={e => setFormData({ ...formData, proteins: Number(e.target.value) })}
+                      value={formData.proteins || ''}
+                      onChange={e => setFormData({ ...formData, proteins: e.target.value ? Number(e.target.value) : 0 })}
+                      placeholder="г"
                       className={inputClass}
                     />
                   </div>
@@ -272,8 +275,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
                     <input
                       type="number"
                       min={0}
-                      value={formData.fats}
-                      onChange={e => setFormData({ ...formData, fats: Number(e.target.value) })}
+                      value={formData.fats || ''}
+                      onChange={e => setFormData({ ...formData, fats: e.target.value ? Number(e.target.value) : 0 })}
+                      placeholder="г"
                       className={inputClass}
                     />
                   </div>
@@ -282,8 +286,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
                     <input
                       type="number"
                       min={0}
-                      value={formData.carbs}
-                      onChange={e => setFormData({ ...formData, carbs: Number(e.target.value) })}
+                      value={formData.carbs || ''}
+                      onChange={e => setFormData({ ...formData, carbs: e.target.value ? Number(e.target.value) : 0 })}
+                      placeholder="г"
                       className={inputClass}
                     />
                   </div>
@@ -348,8 +353,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onS
                   <label className="text-xs font-bold text-zinc-500 uppercase">Порядок сортировки</label>
                   <input
                     type="number"
-                    value={formData.sortOrder}
-                    onChange={e => setFormData({ ...formData, sortOrder: Number(e.target.value) })}
+                    value={formData.sortOrder || ''}
+                    onChange={e => setFormData({ ...formData, sortOrder: e.target.value ? Number(e.target.value) : 0 })}
+                    placeholder="Чем меньше число, тем выше товар"
                     className={inputClass}
                   />
                 </div>

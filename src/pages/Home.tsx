@@ -1,12 +1,12 @@
 import React from 'react';
-import { Search, Bell, MapPin } from 'lucide-react';
+import { Search, Bell, MapPin, X } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useProducts } from '../hooks/useProducts';
 import { ProductCard } from '../components/ProductCard';
 import { ProductDetailModal } from '../components/ProductDetailModal';
 import { motion } from 'motion/react';
 import { formatPrice } from '../lib/utils';
-import { Product } from '../types';
+import { Product, Notification as AppNotification } from '../types';
 import { apiService } from '../services/apiService';
 
 const COMPANY_LOGO_SRC = '/company-logo.png';
@@ -19,6 +19,25 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCategory }) => {
   const { user, setUser } = useAuth();
   const { products, categories, banners, isLoading } = useProducts();
   const [selectedProduct, setSelectedProduct] = React.useState<Product | null>(null);
+  const [notifications, setNotifications] = React.useState<AppNotification[]>([]);
+  const [isNotificationsOpen, setIsNotificationsOpen] = React.useState(false);
+  const [isNotificationsLoading, setIsNotificationsLoading] = React.useState(false);
+
+  const loadNotifications = React.useCallback(async () => {
+    setIsNotificationsLoading(true);
+    try {
+      const data = await apiService.getNotifications();
+      setNotifications(data);
+    } catch (error) {
+      console.error('Failed to fetch notifications:', error);
+    } finally {
+      setIsNotificationsLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    loadNotifications();
+  }, [loadNotifications]);
 
   const handleToggleFavorite = async (productId: string) => {
     if (!user) return;
@@ -64,8 +83,20 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCategory }) => {
             </h1>
           </div>
         </div>
-        <button className="p-3 bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-zinc-100 dark:border-zinc-800 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
+        <button
+          type="button"
+          onClick={() => {
+            setIsNotificationsOpen(true);
+            loadNotifications();
+          }}
+          className="relative p-3 bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-zinc-100 dark:border-zinc-800 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+        >
           <Bell size={20} />
+          {notifications.length > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-orange-500 text-white text-[10px] font-black flex items-center justify-center">
+              {notifications.length > 9 ? '9+' : notifications.length}
+            </span>
+          )}
         </button>
       </div>
 
@@ -165,6 +196,47 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCategory }) => {
         isFavorite={selectedProduct ? user?.favorites.includes(selectedProduct.id) : false}
         onFavoriteToggle={() => selectedProduct && handleToggleFavorite(selectedProduct.id)}
       />
+
+      {isNotificationsOpen && (
+        <div className="fixed inset-0 z-[120] flex items-end justify-center sm:items-center bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-lg max-h-[85vh] bg-white dark:bg-zinc-900 rounded-t-[32px] sm:rounded-[32px] shadow-2xl overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-orange-500/10 text-orange-500 flex items-center justify-center">
+                  <Bell size={20} />
+                </div>
+                <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-100">Уведомления</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsNotificationsOpen(false)}
+                className="w-10 h-10 bg-zinc-100 dark:bg-zinc-800 rounded-2xl flex items-center justify-center text-zinc-500"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto flex flex-col gap-3">
+              {isNotificationsLoading ? (
+                <div className="py-10 text-center text-sm font-bold text-zinc-400">Загрузка...</div>
+              ) : notifications.length > 0 ? (
+                notifications.map(notification => (
+                  <div key={notification.id} className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-100 dark:border-zinc-800 flex flex-col gap-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <h4 className="text-sm font-black text-zinc-900 dark:text-zinc-100">{notification.title}</h4>
+                      <span className="text-[10px] text-zinc-400 font-bold whitespace-nowrap">
+                        {new Date(notification.createdAt).toLocaleDateString('ru-RU')}
+                      </span>
+                    </div>
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed">{notification.message}</p>
+                  </div>
+                ))
+              ) : (
+                <div className="py-12 text-center text-sm font-bold text-zinc-400">Пока нет уведомлений</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

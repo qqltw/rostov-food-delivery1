@@ -123,8 +123,9 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose, o
                   <input
                     required
                     type="number"
-                    value={formData.sortOrder}
-                    onChange={e => setFormData({ ...formData, sortOrder: Number(e.target.value) })}
+                    value={formData.sortOrder || ''}
+                    onChange={e => setFormData({ ...formData, sortOrder: e.target.value ? Number(e.target.value) : 0 })}
+                    placeholder="1, 2, 3..."
                     className={inputClass}
                   />
                 </div>

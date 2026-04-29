@@ -12,6 +12,7 @@ async function seed() {
     await prisma.category.deleteMany();
     await prisma.banner.deleteMany();
     await prisma.promoCode.deleteMany();
+    await prisma.notification.deleteMany();
     await prisma.user.deleteMany();
 
     // Seed Categories
@@ -163,6 +164,14 @@ async function seed() {
         discountType: 'percent',
         value: 20,
         minOrderAmount: 0,
+        isActive: true,
+      },
+    });
+
+    await prisma.notification.create({
+      data: {
+        title: 'Добро пожаловать',
+        message: 'Следите здесь за акциями, новостями доставки и важными объявлениями.',
         isActive: true,
       },
     });
