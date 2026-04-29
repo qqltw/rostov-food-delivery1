@@ -9,6 +9,8 @@ import { formatPrice } from '../lib/utils';
 import { Product } from '../types';
 import { apiService } from '../services/apiService';
 
+const COMPANY_LOGO_SRC = '/company-logo.png';
+
 interface HomePageProps {
   onSelectCategory?: (categoryId: string) => void;
 }
@@ -50,9 +52,11 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCategory }) => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex flex-col">
-          <span className="text-zinc-400 text-xs font-medium uppercase tracking-wider">
-            Доставка в Ростове
-          </span>
+          <img
+            src={COMPANY_LOGO_SRC}
+            alt="Машенькин счастье"
+            className="h-9 w-auto max-w-[180px] object-contain object-left"
+          />
           <div className="flex items-center gap-1">
             <MapPin size={14} className="text-orange-500" />
             <h1 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">

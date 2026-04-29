@@ -10,6 +10,7 @@ import { LoginPage } from './pages/Login';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const queryClient = new QueryClient();
+const COMPANY_LOGO_SRC = '/company-logo.png';
 
 export default function App() {
   const { init, isLoading, isAdmin, user, authError, debugInfo, needsLogin } = useAuth();
@@ -28,11 +29,12 @@ export default function App() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-white dark:bg-zinc-950 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-16 h-16 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm font-bold text-zinc-400 uppercase tracking-widest animate-pulse">
-            Загрузка Ростова...
-          </span>
+        <div className="flex flex-col items-center justify-center">
+          <img
+            src={COMPANY_LOGO_SRC}
+            alt="Машенькин счастье"
+            className="w-56 max-w-[70vw] h-auto object-contain animate-pulse"
+          />
         </div>
       </div>
     );
