@@ -1,4 +1,4 @@
-import { Product, Category, Banner, Order, User, DeliveryEstimate, PaymentResult } from '../types';
+import { Product, Category, Banner, Order, User, DeliveryEstimate, PaymentResult, PromoCode } from '../types';
 
 const API_BASE = '/api';
 
@@ -33,6 +33,17 @@ export const apiService = {
     });
     if (!res.ok) throw new Error('Failed to create order');
     return res.json();
+  },
+
+  async validatePromoCode(code: string, subtotal: number): Promise<{ promoCode: PromoCode; discount: number; totalAfterDiscount: number }> {
+    const res = await fetch(`${API_BASE}/promo-codes/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, subtotal }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Failed to validate promo code');
+    return data;
   },
 
   async getUserOrders(userId: string): Promise<Order[]> {
@@ -238,6 +249,40 @@ export const apiService = {
       method: 'DELETE',
     });
     if (!res.ok) throw new Error('Failed to delete banner');
+  },
+
+  // Admin Promo Codes
+  async getAdminPromoCodes(): Promise<PromoCode[]> {
+    const res = await fetch(`${API_BASE}/admin/promo-codes`);
+    if (!res.ok) throw new Error('Failed to fetch promo codes');
+    return res.json();
+  },
+
+  async createPromoCode(promoData: Omit<PromoCode, 'id'>): Promise<PromoCode> {
+    const res = await fetch(`${API_BASE}/admin/promo-codes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(promoData),
+    });
+    if (!res.ok) throw new Error('Failed to create promo code');
+    return res.json();
+  },
+
+  async updatePromoCode(id: string, promoData: Partial<PromoCode>): Promise<PromoCode> {
+    const res = await fetch(`${API_BASE}/admin/promo-codes/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(promoData),
+    });
+    if (!res.ok) throw new Error('Failed to update promo code');
+    return res.json();
+  },
+
+  async deletePromoCode(id: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/admin/promo-codes/${id}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete promo code');
   },
 
   // Payments (YooKassa)

@@ -8,12 +8,20 @@ import { useAuth } from '../hooks/useAuth';
 import { apiService } from '../services/apiService';
 import { Product } from '../types';
 
-export const CatalogPage: React.FC = () => {
+interface CatalogPageProps {
+  initialCategoryId?: string | null;
+}
+
+export const CatalogPage: React.FC<CatalogPageProps> = ({ initialCategoryId = null }) => {
   const { products, categories, isLoading, dbStatus } = useProducts();
   const { user, setUser } = useAuth();
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+
+  React.useEffect(() => {
+    setSelectedCategoryId(initialCategoryId);
+  }, [initialCategoryId]);
 
   const handleToggleFavorite = async (productId: string) => {
     if (!user) return;

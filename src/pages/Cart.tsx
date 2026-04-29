@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Trash2, Plus, Minus, ShoppingBag, Truck, MapPin, CreditCard, Banknote, Wallet, Loader2 } from 'lucide-react';
+import { Trash2, Plus, Minus, ShoppingBag, Truck, MapPin, CreditCard, Banknote, Wallet, Loader2, Tag, X } from 'lucide-react';
 import { useCart } from '../hooks/useCart';
 import { useAuth } from '../hooks/useAuth';
 import { formatPrice, cn, formatPhoneNumber } from '../lib/utils';
@@ -29,6 +29,10 @@ export const CartPage: React.FC = () => {
   const [orderStatus, setOrderStatus] = useState<'idle' | 'loading' | 'success' | 'awaiting_payment' | 'error'>('idle');
   const [orderError, setOrderError] = useState('');
   const [createdOrderId, setCreatedOrderId] = useState<string | null>(null);
+  const [promoInput, setPromoInput] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState<{ code: string; discount: number } | null>(null);
+  const [promoError, setPromoError] = useState('');
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
 
   // Delivery calculator state
   const [deliveryEstimate, setDeliveryEstimate] = useState<DeliveryEstimate | null>(null);
@@ -94,7 +98,36 @@ export const CartPage: React.FC = () => {
     return totalAmount >= FREE_DELIVERY_THRESHOLD ? 0 : 150;
   })();
 
-  const totalWithDelivery = totalAmount + computedDeliveryFee;
+  const discountAmount = appliedPromo?.discount || 0;
+  const totalWithDelivery = Math.max(0, totalAmount + computedDeliveryFee - discountAmount);
+
+  useEffect(() => {
+    if (appliedPromo) {
+      setAppliedPromo(null);
+      setPromoError('');
+    }
+  }, [totalAmount]);
+
+  const handleApplyPromo = async () => {
+    const code = promoInput.trim();
+    if (!code) {
+      setPromoError('Введите промокод');
+      return;
+    }
+
+    setIsApplyingPromo(true);
+    setPromoError('');
+    try {
+      const result = await apiService.validatePromoCode(code, totalAmount);
+      setAppliedPromo({ code: result.promoCode.code, discount: result.discount });
+      setPromoInput(result.promoCode.code);
+    } catch (error: any) {
+      setAppliedPromo(null);
+      setPromoError(error.message || 'Промокод не применен');
+    } finally {
+      setIsApplyingPromo(false);
+    }
+  };
 
   const formatAddress = (addr: Address | string) => {
     if (typeof addr === 'string') return addr;
@@ -163,7 +196,8 @@ export const CartPage: React.FC = () => {
       })),
       totalAmount: totalWithDelivery,
       deliveryFee: computedDeliveryFee,
-      discount: 0,
+      discount: discountAmount,
+      promoCode: appliedPromo?.code,
       address: finalAddress,
       phone,
       comment,
@@ -544,6 +578,48 @@ export const CartPage: React.FC = () => {
             />
           </div>
 
+          {/* Promo Code */}
+          <div className="flex flex-col gap-2">
+            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-4">Промокод</label>
+            {appliedPromo ? (
+              <div className="flex items-center justify-between p-4 rounded-2xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                <div className="flex items-center gap-3">
+                  <Tag size={18} className="text-green-600 dark:text-green-400" />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-black text-green-700 dark:text-green-300">{appliedPromo.code}</span>
+                    <span className="text-xs text-green-600 dark:text-green-400">Скидка {formatPrice(appliedPromo.discount)}</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setAppliedPromo(null); setPromoError(''); }}
+                  className="p-2 text-green-700 dark:text-green-300"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={promoInput}
+                  onChange={(e) => { setPromoInput(e.target.value.toUpperCase()); setPromoError(''); }}
+                  placeholder="ROSTOV20"
+                  className="min-w-0 flex-1 h-12 px-4 bg-zinc-50 dark:bg-zinc-800 rounded-2xl border border-zinc-100 dark:border-zinc-700 text-sm font-bold uppercase text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
+                />
+                <button
+                  type="button"
+                  onClick={handleApplyPromo}
+                  disabled={isApplyingPromo}
+                  className="h-12 px-4 rounded-2xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-xs font-black disabled:opacity-50"
+                >
+                  {isApplyingPromo ? <Loader2 size={16} className="animate-spin" /> : 'OK'}
+                </button>
+              </div>
+            )}
+            {promoError && <p className="text-xs font-medium text-red-500 ml-4">{promoError}</p>}
+          </div>
+
           {/* Payment Type */}
           <div className="flex flex-col gap-2">
             <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-4">Способ оплаты</label>
@@ -576,6 +652,12 @@ export const CartPage: React.FC = () => {
             <span className="text-zinc-400">Сумма</span>
             <span className="font-bold text-zinc-900 dark:text-zinc-100">{formatPrice(totalAmount)}</span>
           </div>
+          {discountAmount > 0 && (
+            <div className="flex justify-between text-sm">
+              <span className="text-zinc-400">Скидка{appliedPromo?.code ? ` (${appliedPromo.code})` : ''}</span>
+              <span className="font-bold text-green-500">-{formatPrice(discountAmount)}</span>
+            </div>
+          )}
           <div className="flex justify-between text-sm">
             <span className="text-zinc-400">Доставка</span>
             <span className="font-bold text-green-500">

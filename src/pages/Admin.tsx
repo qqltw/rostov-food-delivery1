@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { LayoutDashboard, Package, ShoppingBag, Users, Plus, Edit2, Trash2, FolderTree, Image, Database, ChevronRight, CreditCard, Banknote, Wallet, MapPin, Truck, Check } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingBag, Users, Plus, Edit2, Trash2, FolderTree, Image, Database, ChevronRight, CreditCard, Banknote, Wallet, MapPin, Truck, Check, TicketPercent } from 'lucide-react';
 import { apiService } from '../services/apiService';
-import { Product, Order, Category, User, Banner, ROLE_LABELS, UserRole, ADMIN_ROLES } from '../types';
+import { Product, Order, Category, User, Banner, PromoCode, ROLE_LABELS, UserRole, ADMIN_ROLES } from '../types';
 import { formatPrice, cn } from '../lib/utils';
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from '../constants';
 import { Button } from '../components/Button';
@@ -11,7 +11,16 @@ import { BannerModal } from '../components/admin/BannerModal';
 import { OrderDetailsModal } from '../components/OrderDetailsModal';
 import { useAuth } from '../hooks/useAuth';
 
-type AdminTab = 'dashboard' | 'products' | 'categories' | 'orders' | 'users' | 'banners';
+type AdminTab = 'dashboard' | 'products' | 'categories' | 'orders' | 'users' | 'banners' | 'promoCodes';
+
+const emptyPromoForm: Omit<PromoCode, 'id'> = {
+  code: '',
+  discountType: 'percent',
+  value: 10,
+  minOrderAmount: 0,
+  isActive: true,
+  expiryDate: null,
+};
 
 // Группировка заказов по дням
 function groupOrdersByDate(orders: Order[]): { date: string; label: string; orders: Order[]; deliveredCount: number }[] {
@@ -44,6 +53,7 @@ export const AdminPage: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [banners, setBanners] = useState<Banner[]>([]);
+  const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -54,6 +64,8 @@ export const AdminPage: React.FC = () => {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [isBannerModalOpen, setIsBannerModalOpen] = useState(false);
   const [editingBanner, setEditingBanner] = useState<Banner | null>(null);
+  const [editingPromoCode, setEditingPromoCode] = useState<PromoCode | null>(null);
+  const [promoForm, setPromoForm] = useState<Omit<PromoCode, 'id'>>(emptyPromoForm);
   const [isSeeding, setIsSeeding] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
@@ -68,13 +80,14 @@ export const AdminPage: React.FC = () => {
         const o = await apiService.getCourierOrders(currentUser.id).catch(() => []);
         setOrders(o);
       } else {
-        const [p, c, o, u, s, b] = await Promise.all([
+        const [p, c, o, u, s, b, promo] = await Promise.all([
           apiService.getProducts().catch(() => []),
           apiService.getCategories().catch(() => []),
           apiService.getAdminOrders().catch(() => []),
           apiService.getAdminUsers().catch(() => []),
           apiService.getAdminStats().catch(() => ({ orderCount: 0, revenue: 0, userCount: 0, productCount: 0 })),
           apiService.getAdminBanners().catch(() => []),
+          apiService.getAdminPromoCodes().catch(() => []),
         ]);
         setProducts(p);
         setCategories(c);
@@ -82,6 +95,7 @@ export const AdminPage: React.FC = () => {
         setUsers(u);
         setStats(s);
         setBanners(b);
+        setPromoCodes(promo);
       }
     } catch (error) {
       console.error('Failed to fetch admin data:', error);
@@ -192,6 +206,49 @@ export const AdminPage: React.FC = () => {
     }
   };
 
+  const resetPromoForm = () => {
+    setEditingPromoCode(null);
+    setPromoForm(emptyPromoForm);
+  };
+
+  const handleEditPromoCode = (promoCode: PromoCode) => {
+    setEditingPromoCode(promoCode);
+    setPromoForm({
+      code: promoCode.code,
+      discountType: promoCode.discountType,
+      value: promoCode.value,
+      minOrderAmount: promoCode.minOrderAmount,
+      isActive: promoCode.isActive,
+      expiryDate: promoCode.expiryDate ? promoCode.expiryDate.slice(0, 10) : null,
+    });
+  };
+
+  const handleSavePromoCode = async () => {
+    if (!promoForm.code.trim()) return;
+    try {
+      const payload = { ...promoForm, code: promoForm.code.trim().toUpperCase() };
+      if (editingPromoCode) {
+        await apiService.updatePromoCode(editingPromoCode.id, payload);
+      } else {
+        await apiService.createPromoCode(payload);
+      }
+      resetPromoForm();
+      fetchData();
+    } catch (error) {
+      console.error('Failed to save promo code:', error);
+    }
+  };
+
+  const handleDeletePromoCode = async (id: string) => {
+    if (!window.confirm('Удалить промокод?')) return;
+    try {
+      await apiService.deletePromoCode(id);
+      fetchData();
+    } catch (error) {
+      console.error('Failed to delete promo code:', error);
+    }
+  };
+
   const handleSeedDatabase = async () => {
     if (!window.confirm('Заполнить базу данных демо-данными? Существующие товары, категории и баннеры будут удалены.')) return;
     setIsSeeding(true);
@@ -217,6 +274,7 @@ export const AdminPage: React.FC = () => {
     { id: 'products', label: 'Товары', icon: Package },
     { id: 'categories', label: 'Категории', icon: FolderTree },
     { id: 'banners', label: 'Баннеры', icon: Image },
+    { id: 'promoCodes', label: 'Промокоды', icon: TicketPercent },
     { id: 'orders', label: 'Заказы', icon: ShoppingBag },
     { id: 'users', label: 'Клиенты', icon: Users },
   ];
@@ -555,6 +613,110 @@ export const AdminPage: React.FC = () => {
                     </button>
                     <button
                       onClick={() => handleDeleteBanner(banner.id)}
+                      className="p-2 text-zinc-400 hover:text-red-500"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Promo Codes */}
+      {activeTab === 'promoCodes' && (
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-100">Промокоды</h2>
+            {editingPromoCode && (
+              <button onClick={resetPromoForm} className="text-xs font-bold text-zinc-400">
+                Новый промокод
+              </button>
+            )}
+          </div>
+
+          <div className="bg-white dark:bg-zinc-900 p-4 rounded-3xl border border-zinc-100 dark:border-zinc-800 flex flex-col gap-3">
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                value={promoForm.code}
+                onChange={(e) => setPromoForm(prev => ({ ...prev, code: e.target.value.toUpperCase() }))}
+                placeholder="Код"
+                className="col-span-2 h-12 px-4 bg-zinc-50 dark:bg-zinc-800 rounded-2xl text-sm font-bold uppercase text-zinc-900 dark:text-zinc-100 outline-none"
+              />
+              <select
+                value={promoForm.discountType}
+                onChange={(e) => setPromoForm(prev => ({ ...prev, discountType: e.target.value as PromoCode['discountType'] }))}
+                className="h-12 px-4 bg-zinc-50 dark:bg-zinc-800 rounded-2xl text-sm font-bold text-zinc-900 dark:text-zinc-100 outline-none"
+              >
+                <option value="percent">Процент</option>
+                <option value="fixed">Сумма</option>
+              </select>
+              <input
+                type="number"
+                min="0"
+                value={promoForm.value}
+                onChange={(e) => setPromoForm(prev => ({ ...prev, value: Number(e.target.value) }))}
+                placeholder="Скидка"
+                className="h-12 px-4 bg-zinc-50 dark:bg-zinc-800 rounded-2xl text-sm font-bold text-zinc-900 dark:text-zinc-100 outline-none"
+              />
+              <input
+                type="number"
+                min="0"
+                value={promoForm.minOrderAmount}
+                onChange={(e) => setPromoForm(prev => ({ ...prev, minOrderAmount: Number(e.target.value) }))}
+                placeholder="Мин. заказ"
+                className="h-12 px-4 bg-zinc-50 dark:bg-zinc-800 rounded-2xl text-sm font-bold text-zinc-900 dark:text-zinc-100 outline-none"
+              />
+              <input
+                type="date"
+                value={promoForm.expiryDate || ''}
+                onChange={(e) => setPromoForm(prev => ({ ...prev, expiryDate: e.target.value || null }))}
+                className="h-12 px-4 bg-zinc-50 dark:bg-zinc-800 rounded-2xl text-sm font-bold text-zinc-900 dark:text-zinc-100 outline-none"
+              />
+            </div>
+            <label className="flex items-center gap-2 text-xs font-bold text-zinc-600 dark:text-zinc-300">
+              <input
+                type="checkbox"
+                checked={promoForm.isActive}
+                onChange={(e) => setPromoForm(prev => ({ ...prev, isActive: e.target.checked }))}
+                className="w-4 h-4 rounded accent-orange-500"
+              />
+              Активен
+            </label>
+            <Button size="sm" className="rounded-xl" onClick={handleSavePromoCode}>
+              <Plus size={16} /> {editingPromoCode ? 'Сохранить' : 'Добавить'}
+            </Button>
+          </div>
+
+          {promoCodes.length === 0 ? (
+            <div className="py-12 bg-white dark:bg-zinc-900 rounded-[32px] border border-zinc-100 dark:border-zinc-800 flex flex-col items-center justify-center text-center gap-2">
+              <TicketPercent size={32} className="text-zinc-300" />
+              <p className="text-sm text-zinc-400 font-medium">Промокодов пока нет</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {promoCodes.map(promoCode => (
+                <div key={promoCode.id} className="bg-white dark:bg-zinc-900 p-4 rounded-3xl border border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <span className="text-sm font-black text-zinc-900 dark:text-zinc-100">{promoCode.code}</span>
+                    <span className="text-xs text-zinc-400">
+                      {promoCode.discountType === 'percent' ? `${promoCode.value}%` : formatPrice(promoCode.value)}
+                      {promoCode.minOrderAmount > 0 ? ` от ${formatPrice(promoCode.minOrderAmount)}` : ''}
+                      {promoCode.expiryDate ? ` до ${new Date(promoCode.expiryDate).toLocaleDateString('ru-RU')}` : ''}
+                    </span>
+                    {!promoCode.isActive && <span className="text-[10px] text-red-500 font-bold uppercase">выключен</span>}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleEditPromoCode(promoCode)}
+                      className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button
+                      onClick={() => handleDeletePromoCode(promoCode.id)}
                       className="p-2 text-zinc-400 hover:text-red-500"
                     >
                       <Trash2 size={16} />

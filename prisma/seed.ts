@@ -11,6 +11,7 @@ async function seed() {
     await prisma.product.deleteMany();
     await prisma.category.deleteMany();
     await prisma.banner.deleteMany();
+    await prisma.promoCode.deleteMany();
     await prisma.user.deleteMany();
 
     // Seed Categories
@@ -155,6 +156,16 @@ async function seed() {
     for (const banner of banners) {
       await prisma.banner.create({ data: banner });
     }
+
+    await prisma.promoCode.create({
+      data: {
+        code: 'ROSTOV20',
+        discountType: 'percent',
+        value: 20,
+        minOrderAmount: 0,
+        isActive: true,
+      },
+    });
 
     console.log('Database seeded successfully');
   } catch (error) {

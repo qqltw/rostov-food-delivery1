@@ -9,7 +9,11 @@ import { formatPrice } from '../lib/utils';
 import { Product } from '../types';
 import { apiService } from '../services/apiService';
 
-export const HomePage: React.FC = () => {
+interface HomePageProps {
+  onSelectCategory?: (categoryId: string) => void;
+}
+
+export const HomePage: React.FC<HomePageProps> = ({ onSelectCategory }) => {
   const { user, setUser } = useAuth();
   const { products, categories, banners, isLoading } = useProducts();
   const [selectedProduct, setSelectedProduct] = React.useState<Product | null>(null);
@@ -76,6 +80,8 @@ export const HomePage: React.FC = () => {
         {categories.map(category => (
           <button
             key={category.id}
+            type="button"
+            onClick={() => onSelectCategory?.(category.id)}
             className="flex flex-col items-center gap-2 min-w-[80px]"
           >
             <div className="w-16 h-16 bg-white dark:bg-zinc-900 rounded-3xl shadow-sm border border-zinc-100 dark:border-zinc-800 flex items-center justify-center p-3">

@@ -127,12 +127,13 @@ export interface PaymentResult {
 }
 
 export interface PromoCode {
+  id: string;
   code: string;
   discountType: 'percent' | 'fixed';
   value: number;
   minOrderAmount: number;
   isActive: boolean;
-  expiryDate: string;
+  expiryDate?: string | null;
 }
 
 export interface Banner {

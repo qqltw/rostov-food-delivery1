@@ -14,6 +14,7 @@ const queryClient = new QueryClient();
 export default function App() {
   const { init, isLoading, isAdmin, user, authError, debugInfo, needsLogin } = useAuth();
   const [activeTab, setActiveTab] = useState('home');
+  const [catalogCategoryId, setCatalogCategoryId] = useState<string | null>(null);
 
   useEffect(() => {
     // Apply saved theme on startup
@@ -68,8 +69,8 @@ export default function App() {
     }
 
     switch (activeTab) {
-      case 'home': return <HomePage />;
-      case 'catalog': return <CatalogPage />;
+      case 'home': return <HomePage onSelectCategory={(categoryId) => { setCatalogCategoryId(categoryId); setActiveTab('catalog'); }} />;
+      case 'catalog': return <CatalogPage initialCategoryId={catalogCategoryId} />;
       case 'cart': return <CartPage />;
       case 'profile': return <ProfilePage />;
       case 'admin': return <AdminPage />;

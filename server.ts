@@ -107,6 +107,34 @@ function serializeUser(user: any) {
   };
 }
 
+function normalizePromoCode(code: string) {
+  return code.trim().toUpperCase();
+}
+
+function calculatePromoDiscount(promoCode: any, subtotal: number) {
+  if (promoCode.discountType === 'percent') {
+    return Math.min(subtotal, Math.round((subtotal * promoCode.value) / 100));
+  }
+  return Math.min(subtotal, promoCode.value);
+}
+
+async function validatePromoCode(code: string, subtotal: number) {
+  const normalizedCode = normalizePromoCode(code);
+  const promoCode = await prisma.promoCode.findUnique({ where: { code: normalizedCode } });
+  if (!promoCode || !promoCode.isActive) {
+    throw new Error('Промокод не найден или выключен');
+  }
+  if (promoCode.expiryDate && promoCode.expiryDate < new Date()) {
+    throw new Error('Срок действия промокода истек');
+  }
+  if (subtotal < promoCode.minOrderAmount) {
+    throw new Error(`Минимальная сумма заказа ${promoCode.minOrderAmount} ₽`);
+  }
+
+  const discount = calculatePromoDiscount(promoCode, subtotal);
+  return { promoCode, discount, totalAfterDiscount: Math.max(0, subtotal - discount) };
+}
+
 // API Routes
 app.get('/api/health', async (req, res) => {
   const dbStatus = await isDbConnected();
@@ -318,9 +346,47 @@ app.get('/api/banners', async (req, res) => {
   }
 });
 
+// Promo codes
+app.post('/api/promo-codes/validate', async (req, res) => {
+  const { code, subtotal } = req.body;
+  const numericSubtotal = Number(subtotal);
+
+  if (!code || !Number.isFinite(numericSubtotal) || numericSubtotal <= 0) {
+    return res.status(400).json({ error: 'Введите промокод и сумму заказа' });
+  }
+
+  try {
+    if (!(await isDbConnected())) {
+      const normalizedCode = normalizePromoCode(code);
+      if (normalizedCode !== 'ROSTOV20') {
+        return res.status(404).json({ error: 'Промокод не найден или выключен' });
+      }
+      const discount = Math.min(numericSubtotal, Math.round(numericSubtotal * 0.2));
+      return res.json({
+        promoCode: {
+          id: 'mock-promo-rostov20',
+          code: normalizedCode,
+          discountType: 'percent',
+          value: 20,
+          minOrderAmount: 0,
+          isActive: true,
+          expiryDate: null,
+        },
+        discount,
+        totalAfterDiscount: Math.max(0, numericSubtotal - discount),
+      });
+    }
+
+    const result = await validatePromoCode(code, numericSubtotal);
+    res.json(result);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message || 'Промокод не применен' });
+  }
+});
+
 // Orders
 app.post('/api/orders', async (req, res) => {
-  const { userId, items, totalAmount, deliveryFee, discount, address, phone, name, deliveryType, paymentType, comment } = req.body;
+  const { userId, items, totalAmount, deliveryFee, discount, promoCode, address, phone, name, deliveryType, paymentType, comment } = req.body;
 
   if (!userId || !items || !items.length || !address || !phone || !name) {
     return res.status(400).json({ error: 'Missing required fields' });
@@ -334,6 +400,7 @@ app.post('/api/orders', async (req, res) => {
         totalAmount,
         deliveryFee,
         discount: discount || 0,
+        promoCode: promoCode ? normalizePromoCode(promoCode) : null,
         address,
         phone,
         name,
@@ -361,13 +428,26 @@ app.post('/api/orders', async (req, res) => {
       ? await prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true } })
       : [];
     const existingProductIds = new Set(existingProducts.map(p => p.id));
+    const subtotal = items.reduce((sum: number, item: any) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
+    let appliedDiscount = 0;
+    let appliedPromoCode: string | null = null;
+
+    if (promoCode) {
+      const validation = await validatePromoCode(promoCode, subtotal);
+      appliedDiscount = validation.discount;
+      appliedPromoCode = validation.promoCode.code;
+    }
+
+    const normalizedDeliveryFee = Number(deliveryFee || 0);
+    const finalTotalAmount = Math.max(0, subtotal + normalizedDeliveryFee - appliedDiscount);
 
     const order = await prisma.order.create({
       data: {
         userId,
-        totalAmount,
-        deliveryFee,
-        discount: discount || 0,
+        totalAmount: finalTotalAmount,
+        deliveryFee: normalizedDeliveryFee,
+        discount: appliedDiscount,
+        promoCode: appliedPromoCode,
         address,
         phone,
         name,
@@ -767,6 +847,71 @@ app.delete('/api/admin/banners/:id', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete banner' });
+  }
+});
+
+// Admin Promo Codes
+app.get('/api/admin/promo-codes', async (req, res) => {
+  try {
+    if (!(await isDbConnected())) {
+      return res.json([]);
+    }
+    const promoCodes = await prisma.promoCode.findMany({
+      orderBy: { code: 'asc' },
+    });
+    res.json(promoCodes);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch promo codes' });
+  }
+});
+
+app.post('/api/admin/promo-codes', async (req, res) => {
+  try {
+    const { code, discountType, value, minOrderAmount, isActive, expiryDate } = req.body;
+    const promoCode = await prisma.promoCode.create({
+      data: {
+        code: normalizePromoCode(code),
+        discountType,
+        value: Number(value),
+        minOrderAmount: Number(minOrderAmount || 0),
+        isActive: Boolean(isActive),
+        expiryDate: expiryDate ? new Date(expiryDate) : null,
+      },
+    });
+    res.json(promoCode);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create promo code' });
+  }
+});
+
+app.put('/api/admin/promo-codes/:id', async (req, res) => {
+  try {
+    const { code, discountType, value, minOrderAmount, isActive, expiryDate } = req.body;
+    const promoCode = await prisma.promoCode.update({
+      where: { id: req.params.id },
+      data: {
+        ...(code !== undefined ? { code: normalizePromoCode(code) } : {}),
+        ...(discountType !== undefined ? { discountType } : {}),
+        ...(value !== undefined ? { value: Number(value) } : {}),
+        ...(minOrderAmount !== undefined ? { minOrderAmount: Number(minOrderAmount || 0) } : {}),
+        ...(isActive !== undefined ? { isActive: Boolean(isActive) } : {}),
+        ...(expiryDate !== undefined ? { expiryDate: expiryDate ? new Date(expiryDate) : null } : {}),
+      },
+    });
+    res.json(promoCode);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update promo code' });
+  }
+});
+
+app.delete('/api/admin/promo-codes/:id', async (req, res) => {
+  try {
+    await prisma.promoCode.delete({
+      where: { id: req.params.id },
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete promo code' });
   }
 });
 
@@ -1328,6 +1473,7 @@ app.post('/api/dev/seed', async (req, res) => {
     await prisma.product.deleteMany();
     await prisma.category.deleteMany();
     await prisma.banner.deleteMany();
+    await prisma.promoCode.deleteMany();
 
     // Seed Categories
     const categories = [
@@ -1455,6 +1601,16 @@ app.post('/api/dev/seed', async (req, res) => {
     for (const banner of banners) {
       await prisma.banner.create({ data: banner });
     }
+
+    await prisma.promoCode.create({
+      data: {
+        code: 'ROSTOV20',
+        discountType: 'percent',
+        value: 20,
+        minOrderAmount: 0,
+        isActive: true,
+      },
+    });
 
     res.json({ message: 'Database seeded successfully' });
   } catch (error) {
