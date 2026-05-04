@@ -59,9 +59,14 @@ async function isDbConnected() {
 }
 
 // Admin IDs per platform
-const ADMIN_IDS: Record<string, bigint> = {
-  telegram: 1114947252n,
-  // max: 123456789n, // TODO: установите ваш MAX admin ID
+function parseAdminId(value: string | undefined): bigint | undefined {
+  if (!value || !/^\d+$/.test(value)) return undefined;
+  return BigInt(value);
+}
+
+const ADMIN_IDS: Record<string, bigint | undefined> = {
+  telegram: parseAdminId(process.env.ADMIN_TELEGRAM_ID) ?? 1114947252n,
+  max: parseAdminId(process.env.ADMIN_MAX_ID),
 };
 
 function isAdminId(platform: string, platformId: bigint): boolean {
