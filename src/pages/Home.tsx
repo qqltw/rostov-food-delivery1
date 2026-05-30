@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Bell, MapPin, X } from 'lucide-react';
+import { Bell, MapPin, PhoneCall, X } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useProducts } from '../hooks/useProducts';
 import { ProductCard } from '../components/ProductCard';
@@ -100,14 +100,18 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCategory }) => {
         </button>
       </div>
 
-      {/* Search Bar */}
-      <div className="relative">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={20} />
-        <input
-          type="text"
-          placeholder="Поиск блюд, категорий..."
-          className="w-full h-14 pl-12 pr-6 bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-100 dark:border-zinc-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-all text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
-        />
+      {/* Corporate Catering */}
+      <div className="rounded-[28px] border border-orange-100 dark:border-orange-900/40 bg-gradient-to-br from-orange-50 via-white to-zinc-50 dark:from-orange-950/30 dark:via-zinc-900 dark:to-zinc-900 p-5 shadow-sm">
+        <p className="text-sm font-semibold leading-relaxed text-zinc-700 dark:text-zinc-200">
+          По организации корпоративного питания обращайтесь по номеру телефона
+        </p>
+        <a
+          href="tel:+79034308010"
+          className="mt-3 inline-flex items-center gap-2 text-lg font-black text-orange-500 hover:text-orange-600 transition-colors"
+        >
+          <PhoneCall size={18} />
+          +7 (903) 430-80-10
+        </a>
       </div>
 
       {/* Categories Horizontal Scroll */}

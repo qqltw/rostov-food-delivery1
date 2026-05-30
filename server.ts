@@ -408,7 +408,8 @@ app.post('/api/promo-codes/validate', async (req, res) => {
 
 // Orders
 app.post('/api/orders', async (req, res) => {
-  const { userId, items, totalAmount, deliveryFee, discount, promoCode, address, phone, name, deliveryType, paymentType, comment } = req.body;
+  const { userId, items, totalAmount, deliveryFee, address, phone, name, deliveryType, comment } = req.body;
+  const paymentType = 'online';
 
   if (!userId || !items || !items.length || !address || !phone || !name) {
     return res.status(400).json({ error: 'Missing required fields' });
@@ -421,8 +422,8 @@ app.post('/api/orders', async (req, res) => {
         userId,
         totalAmount,
         deliveryFee,
-        discount: discount || 0,
-        promoCode: promoCode ? normalizePromoCode(promoCode) : null,
+        discount: 0,
+        promoCode: null,
         address,
         phone,
         name,
@@ -458,14 +459,8 @@ app.post('/api/orders', async (req, res) => {
       : [];
     const existingProductIds = new Set(existingProducts.map(p => p.id));
     const subtotal = items.reduce((sum: number, item: any) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
-    let appliedDiscount = 0;
-    let appliedPromoCode: string | null = null;
-
-    if (promoCode) {
-      const validation = await validatePromoCode(promoCode, subtotal);
-      appliedDiscount = validation.discount;
-      appliedPromoCode = validation.promoCode.code;
-    }
+    const appliedDiscount = 0;
+    const appliedPromoCode: string | null = null;
 
     const normalizedDeliveryFee = Number(deliveryFee || 0);
     const finalTotalAmount = Math.max(0, subtotal + normalizedDeliveryFee - appliedDiscount);

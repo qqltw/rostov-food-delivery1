@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Trash2, Plus, Minus, ShoppingBag, Truck, MapPin, CreditCard, Banknote, Wallet, Loader2, Tag, X } from 'lucide-react';
+import { Trash2, Plus, Minus, ShoppingBag, Truck, MapPin, CreditCard, Loader2 } from 'lucide-react';
 import { useCart } from '../hooks/useCart';
 import { useAuth } from '../hooks/useAuth';
 import { formatPrice, cn, formatPhoneNumber } from '../lib/utils';
@@ -8,14 +8,14 @@ import { FREE_DELIVERY_THRESHOLD, PAYMENT_TYPE_LABELS } from '../constants';
 import { apiService } from '../services/apiService';
 import { Address, DeliveryEstimate } from '../types';
 
-type PaymentType = 'cash' | 'card' | 'online';
+type PaymentType = 'online';
 
 export const CartPage: React.FC = () => {
   const { items, totalAmount, updateQuantity, removeItem, clearCart } = useCart();
   const { user, setUser } = useAuth();
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [deliveryType, setDeliveryType] = useState<'delivery' | 'pickup'>('delivery');
-  const [paymentType, setPaymentType] = useState<PaymentType>('cash');
+  const [paymentType] = useState<PaymentType>('online');
 
   const [selectedAddress, setSelectedAddress] = useState<Address | null>(user?.addresses?.[0] || null);
   const [manualAddress, setManualAddress] = useState('');
@@ -29,10 +29,6 @@ export const CartPage: React.FC = () => {
   const [orderStatus, setOrderStatus] = useState<'idle' | 'loading' | 'success' | 'awaiting_payment' | 'error'>('idle');
   const [orderError, setOrderError] = useState('');
   const [createdOrderId, setCreatedOrderId] = useState<string | null>(null);
-  const [promoInput, setPromoInput] = useState('');
-  const [appliedPromo, setAppliedPromo] = useState<{ code: string; discount: number } | null>(null);
-  const [promoError, setPromoError] = useState('');
-  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
 
   // Delivery calculator state
   const [deliveryEstimate, setDeliveryEstimate] = useState<DeliveryEstimate | null>(null);
@@ -98,36 +94,8 @@ export const CartPage: React.FC = () => {
     return totalAmount >= FREE_DELIVERY_THRESHOLD ? 0 : 150;
   })();
 
-  const discountAmount = appliedPromo?.discount || 0;
+  const discountAmount = 0;
   const totalWithDelivery = Math.max(0, totalAmount + computedDeliveryFee - discountAmount);
-
-  useEffect(() => {
-    if (appliedPromo) {
-      setAppliedPromo(null);
-      setPromoError('');
-    }
-  }, [totalAmount]);
-
-  const handleApplyPromo = async () => {
-    const code = promoInput.trim();
-    if (!code) {
-      setPromoError('Введите промокод');
-      return;
-    }
-
-    setIsApplyingPromo(true);
-    setPromoError('');
-    try {
-      const result = await apiService.validatePromoCode(code, totalAmount);
-      setAppliedPromo({ code: result.promoCode.code, discount: result.discount });
-      setPromoInput(result.promoCode.code);
-    } catch (error: any) {
-      setAppliedPromo(null);
-      setPromoError(error.message || 'Промокод не применен');
-    } finally {
-      setIsApplyingPromo(false);
-    }
-  };
 
   const formatAddress = (addr: Address | string) => {
     if (typeof addr === 'string') return addr;
@@ -207,7 +175,7 @@ export const CartPage: React.FC = () => {
       totalAmount: totalWithDelivery,
       deliveryFee: computedDeliveryFee,
       discount: discountAmount,
-      promoCode: appliedPromo?.code,
+      promoCode: null,
       address: finalAddress,
       phone: formattedPhone,
       comment,
@@ -219,26 +187,18 @@ export const CartPage: React.FC = () => {
     try {
       const order = await apiService.createOrder(orderData);
 
-      if (paymentType === 'online') {
-        // Create YooKassa payment and redirect
-        setCreatedOrderId(order.id);
-        try {
-          const payment = await apiService.createPayment(order.id);
-          if (payment.paymentUrl) {
-            // Redirect to YooKassa payment page
-            window.location.href = payment.paymentUrl;
-            return;
-          }
-          setOrderError('Не удалось получить ссылку на оплату');
-          setOrderStatus('error');
-        } catch (err: any) {
-          setOrderError(err.message || 'Ошибка при создании платежа');
-          setOrderStatus('error');
+      setCreatedOrderId(order.id);
+      try {
+        const payment = await apiService.createPayment(order.id);
+        if (payment.paymentUrl) {
+          window.location.href = payment.paymentUrl;
+          return;
         }
-      } else {
-        // Cash or card — order is done
-        setOrderStatus('success');
-        clearCart();
+        setOrderError('Не удалось получить ссылку на оплату');
+        setOrderStatus('error');
+      } catch (err: any) {
+        setOrderError(err.message || 'Ошибка при создании платежа');
+        setOrderStatus('error');
       }
     } catch (error) {
       console.error('Checkout error:', error);
@@ -336,12 +296,6 @@ export const CartPage: React.FC = () => {
       </div>
     );
   }
-
-  const paymentOptions: { type: PaymentType; icon: any; label: string }[] = [
-    { type: 'cash', icon: Banknote, label: PAYMENT_TYPE_LABELS.cash },
-    { type: 'card', icon: CreditCard, label: PAYMENT_TYPE_LABELS.card },
-    { type: 'online', icon: Wallet, label: PAYMENT_TYPE_LABELS.online },
-  ];
 
   const isDeliveryBlocked = deliveryType === 'delivery' && deliveryEstimate && !deliveryEstimate.available;
   const isCheckoutDisabled = (deliveryType === 'delivery' && !selectedAddress && !manualAddress) || !!isDeliveryBlocked;
@@ -588,70 +542,15 @@ export const CartPage: React.FC = () => {
             />
           </div>
 
-          {/* Promo Code */}
-          <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-4">Промокод</label>
-            {appliedPromo ? (
-              <div className="flex items-center justify-between p-4 rounded-2xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
-                <div className="flex items-center gap-3">
-                  <Tag size={18} className="text-green-600 dark:text-green-400" />
-                  <div className="flex flex-col">
-                    <span className="text-sm font-black text-green-700 dark:text-green-300">{appliedPromo.code}</span>
-                    <span className="text-xs text-green-600 dark:text-green-400">Скидка {formatPrice(appliedPromo.discount)}</span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => { setAppliedPromo(null); setPromoError(''); }}
-                  className="p-2 text-green-700 dark:text-green-300"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            ) : (
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={promoInput}
-                  onChange={(e) => { setPromoInput(e.target.value.toUpperCase()); setPromoError(''); }}
-                  placeholder="ROSTOV20"
-                  className="min-w-0 flex-1 h-12 px-4 bg-zinc-50 dark:bg-zinc-800 rounded-2xl border border-zinc-100 dark:border-zinc-700 text-sm font-bold uppercase text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
-                />
-                <button
-                  type="button"
-                  onClick={handleApplyPromo}
-                  disabled={isApplyingPromo}
-                  className="h-12 px-4 rounded-2xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-xs font-black disabled:opacity-50"
-                >
-                  {isApplyingPromo ? <Loader2 size={16} className="animate-spin" /> : 'OK'}
-                </button>
-              </div>
-            )}
-            {promoError && <p className="text-xs font-medium text-red-500 ml-4">{promoError}</p>}
-          </div>
-
           {/* Payment Type */}
           <div className="flex flex-col gap-2">
             <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-4">Способ оплаты</label>
-            <div className="flex flex-col gap-2">
-              {paymentOptions.map(opt => {
-                const Icon = opt.icon;
-                return (
-                  <button
-                    key={opt.type}
-                    onClick={() => setPaymentType(opt.type)}
-                    className={cn(
-                      "flex items-center gap-3 p-4 rounded-2xl border transition-all",
-                      paymentType === opt.type
-                        ? "bg-orange-500 border-orange-500 text-white shadow-lg shadow-orange-500/20"
-                        : "bg-zinc-50 dark:bg-zinc-800 border-zinc-100 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100"
-                    )}
-                  >
-                    <Icon size={18} className={paymentType === opt.type ? "text-white" : "text-orange-500"} />
-                    <span className="text-sm font-bold">{opt.label}</span>
-                  </button>
-                );
-              })}
+            <div className="flex items-center gap-3 p-4 rounded-2xl border bg-orange-500 border-orange-500 text-white shadow-lg shadow-orange-500/20">
+              <CreditCard size={18} className="text-white" />
+              <div className="flex flex-col">
+                <span className="text-sm font-bold">{PAYMENT_TYPE_LABELS.online}</span>
+                <span className="text-xs text-white/80">Безналичная оплата через платёжную систему</span>
+              </div>
             </div>
           </div>
         </div>
@@ -664,7 +563,7 @@ export const CartPage: React.FC = () => {
           </div>
           {discountAmount > 0 && (
             <div className="flex justify-between text-sm">
-              <span className="text-zinc-400">Скидка{appliedPromo?.code ? ` (${appliedPromo.code})` : ''}</span>
+              <span className="text-zinc-400">Скидка</span>
               <span className="font-bold text-green-500">-{formatPrice(discountAmount)}</span>
             </div>
           )}
@@ -701,7 +600,7 @@ export const CartPage: React.FC = () => {
           className="w-full h-16 rounded-[24px]"
           disabled={isCheckoutDisabled}
         >
-          {paymentType === 'online' ? 'Оплатить онлайн' : 'Заказать'}
+          Оплатить через ЮKassa
         </Button>
       </div>
     </div>

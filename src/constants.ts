@@ -27,7 +27,7 @@ export const ORDER_STATUS_COLORS: Record<string, string> = {
 export const PAYMENT_TYPE_LABELS: Record<string, string> = {
   cash: 'Наличные',
   card: 'Картой курьеру',
-  online: 'Онлайн (ЮKassa)',
+  online: 'ЮKassa',
 };
 
 export const PAYMENT_STATUS_LABELS: Record<string, string> = {
