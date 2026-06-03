@@ -7,6 +7,7 @@
     "dev": "tsx server.ts",
     "start": "tsx server.ts",
     "build": "rm -rf dist && vite build",
+    "db:repair-platform-migration": "prisma migrate resolve --rolled-back 20260414000000_add_platform_support || true",
     "db:deploy": "prisma migrate deploy",
     "preview": "vite preview",
     "clean": "rm -rf dist",
