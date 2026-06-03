@@ -7,6 +7,8 @@ import { CartPage } from './pages/Cart';
 import { ProfilePage } from './pages/Profile';
 import { AdminPage } from './pages/Admin';
 import { LoginPage } from './pages/Login';
+import { LegalPage } from './pages/Legal';
+import { getLegalDocumentIdFromPath, LEGAL_DOCUMENTS, LegalDocumentId } from './legal';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const queryClient = new QueryClient();
@@ -14,7 +16,10 @@ const COMPANY_LOGO_SRC = '/company-logo.png';
 
 export default function App() {
   const { init, isLoading, isAdmin, user, authError, debugInfo, needsLogin } = useAuth();
-  const [activeTab, setActiveTab] = useState('home');
+  const [activeLegalDocument, setActiveLegalDocument] = useState<LegalDocumentId | null>(() => (
+    getLegalDocumentIdFromPath(window.location.pathname)
+  ));
+  const [activeTab, setActiveTab] = useState(activeLegalDocument ? 'profile' : 'home');
   const [catalogCategoryId, setCatalogCategoryId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -26,7 +31,42 @@ export default function App() {
     init();
   }, [init]);
 
-  if (isLoading) {
+  useEffect(() => {
+    const handlePopState = () => {
+      const documentId = getLegalDocumentIdFromPath(window.location.pathname);
+      setActiveLegalDocument(documentId);
+      if (documentId) {
+        setActiveTab('profile');
+        window.scrollTo({ top: 0 });
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const navigateToTab = (tab: string) => {
+    setActiveLegalDocument(null);
+    setActiveTab(tab);
+    if (window.location.pathname !== '/') {
+      window.history.pushState(null, '', '/');
+    }
+  };
+
+  const openLegalDocument = (documentId: LegalDocumentId) => {
+    setActiveLegalDocument(documentId);
+    setActiveTab('profile');
+    window.history.pushState(null, '', LEGAL_DOCUMENTS[documentId].path);
+    window.scrollTo({ top: 0 });
+  };
+
+  const closeLegalDocument = () => {
+    setActiveLegalDocument(null);
+    window.history.pushState(null, '', '/');
+    window.scrollTo({ top: 0 });
+  };
+
+  if (isLoading && !activeLegalDocument) {
     return (
       <div className="min-h-screen bg-white dark:bg-zinc-950 flex items-center justify-center">
         <div className="flex flex-col items-center justify-center">
@@ -40,11 +80,11 @@ export default function App() {
     );
   }
 
-  if (needsLogin && !user) {
+  if (needsLogin && !user && !activeLegalDocument) {
     return <LoginPage />;
   }
 
-  if (!user && authError) {
+  if (!user && authError && !activeLegalDocument) {
     return (
       <div className="min-h-screen bg-white dark:bg-zinc-950 flex items-center justify-center p-6">
         <div className="max-w-md w-full flex flex-col gap-4">
@@ -65,16 +105,20 @@ export default function App() {
   }
 
   const renderPage = () => {
+    if (activeLegalDocument) {
+      return <LegalPage documentId={activeLegalDocument} onBack={closeLegalDocument} />;
+    }
+
     // Special case for admin if user is admin and we want to show it
     if (activeTab === 'profile' && isAdmin) {
       // In a real app, we might have a separate button or route
     }
 
     switch (activeTab) {
-      case 'home': return <HomePage onSelectCategory={(categoryId) => { setCatalogCategoryId(categoryId); setActiveTab('catalog'); }} />;
+      case 'home': return <HomePage onSelectCategory={(categoryId) => { setCatalogCategoryId(categoryId); navigateToTab('catalog'); }} />;
       case 'catalog': return <CatalogPage initialCategoryId={catalogCategoryId} />;
       case 'cart': return <CartPage />;
-      case 'profile': return <ProfilePage />;
+      case 'profile': return <ProfilePage onOpenLegal={openLegalDocument} />;
       case 'admin': return <AdminPage />;
       default: return <HomePage />;
     }
@@ -82,14 +126,14 @@ export default function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Layout activeTab={activeTab} onTabChange={setActiveTab}>
+      <Layout activeTab={activeTab} onTabChange={navigateToTab}>
         {renderPage()}
         
         {/* Admin quick access */}
         {isAdmin && activeTab !== 'admin' && (
           <div className="fixed bottom-24 left-4 z-[100]">
             <button
-              onClick={() => setActiveTab('admin')}
+              onClick={() => navigateToTab('admin')}
               className="bg-zinc-900/80 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-xl border border-white/10"
             >
               ADMIN

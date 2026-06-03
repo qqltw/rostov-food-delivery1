@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { User as UserIcon, MapPin, History, Settings, LogOut, ChevronRight, Package, Clock, X, Plus, Heart, Trash2, Sun, Moon } from 'lucide-react';
+import { User as UserIcon, MapPin, History, Settings, LogOut, ChevronRight, Package, Clock, X, Plus, Heart, Trash2, Sun, Moon, ShieldCheck, FileText, CreditCard, RotateCcw } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { apiService } from '../services/apiService';
 import { Order, Product, Address } from '../types';
 import { formatPrice, cn, formatPhoneNumber } from '../lib/utils';
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from '../constants';
+import { LEGAL_DOCUMENTS, LEGAL_OWNER, LegalDocumentId, legalDocumentOrder } from '../legal';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
@@ -12,7 +13,18 @@ import { ProductCard } from '../components/ProductCard';
 import { ProductDetailModal } from '../components/ProductDetailModal';
 import { OrderDetailsModal } from '../components/OrderDetailsModal';
 
-export const ProfilePage: React.FC = () => {
+interface ProfilePageProps {
+  onOpenLegal: (documentId: LegalDocumentId) => void;
+}
+
+const legalIcons: Record<LegalDocumentId, React.ElementType> = {
+  'personal-data': ShieldCheck,
+  privacy: FileText,
+  offer: FileText,
+  'payment-refund': CreditCard,
+};
+
+export const ProfilePage: React.FC<ProfilePageProps> = ({ onOpenLegal }) => {
   const { user, isAdmin, setUser } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
@@ -279,6 +291,52 @@ export const ProfilePage: React.FC = () => {
           </div>
           <ChevronRight size={18} className="text-zinc-400" />
         </button>
+      </div>
+
+      {/* Legal */}
+      <div className="flex flex-col gap-4 pt-2">
+        <div className="bg-white dark:bg-zinc-900 p-5 rounded-[28px] border border-zinc-100 dark:border-zinc-800 flex flex-col gap-4">
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Юридическая информация</span>
+            <span className="text-sm font-black text-zinc-900 dark:text-zinc-100">{LEGAL_OWNER.legalName}</span>
+            <span className="text-xs font-medium text-zinc-400">
+              ОГРНИП {LEGAL_OWNER.ogrnip} · ИНН {LEGAL_OWNER.inn}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {legalDocumentOrder.map((documentId) => {
+              const document = LEGAL_DOCUMENTS[documentId];
+              const Icon = legalIcons[documentId] ?? RotateCcw;
+
+              return (
+                <a
+                  key={document.id}
+                  href={document.path}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    onOpenLegal(document.id);
+                  }}
+                  className="flex items-center justify-between gap-3 p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-100 dark:border-zinc-800 active:scale-[0.98] transition-all group"
+                >
+                  <span className="flex items-center gap-3 min-w-0">
+                    <span className="w-9 h-9 rounded-xl bg-white dark:bg-zinc-900 flex items-center justify-center text-zinc-500 group-hover:text-orange-500 transition-colors flex-shrink-0">
+                      <Icon size={18} />
+                    </span>
+                    <span className="text-xs font-bold text-zinc-700 dark:text-zinc-200 truncate">
+                      {document.shortTitle}
+                    </span>
+                  </span>
+                  <ChevronRight size={16} className="text-zinc-300 group-hover:text-orange-500 transition-colors flex-shrink-0" />
+                </a>
+              );
+            })}
+          </div>
+
+          <p className="text-[10px] leading-4 text-zinc-400 font-medium">
+            Онлайн-оплата доступна через ЮKassa. Платежные данные банковской карты вводятся на стороне платежного провайдера.
+          </p>
+        </div>
       </div>
 
       {/* Modals */}
