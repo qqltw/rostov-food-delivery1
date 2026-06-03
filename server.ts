@@ -101,6 +101,10 @@ function verifyPassword(password: string, hash: string): Promise<boolean> {
   });
 }
 
+function createBrowserPlatformId(): bigint {
+  return BigInt(Date.now()) * 1000n + BigInt(crypto.randomInt(0, 1000));
+}
+
 // Serialize user for JSON response (BigInt → string)
 function serializeUser(user: any) {
   const { passwordHash, ...rest } = user;
@@ -263,6 +267,62 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// Browser login-or-register by password
+app.post('/api/auth/browser', async (req, res) => {
+  try {
+    const rawLogin = req.body?.login;
+    const rawPassword = req.body?.password;
+    const login = typeof rawLogin === 'string' ? rawLogin.trim() : '';
+    const password = typeof rawPassword === 'string' ? rawPassword : '';
+    const firstName = typeof req.body?.firstName === 'string' ? req.body.firstName.trim() : '';
+    const lastName = typeof req.body?.lastName === 'string' ? req.body.lastName.trim() : '';
+
+    if (!login || !password) {
+      return res.status(400).json({ error: 'Введите логин и пароль' });
+    }
+
+    if (!process.env.DATABASE_URL) {
+      return res.status(503).json({ error: 'База данных недоступна' });
+    }
+
+    const existing = await prisma.user.findUnique({ where: { login } });
+    if (existing) {
+      if (!existing.passwordHash) {
+        return res.status(401).json({ error: 'Для этого аккаунта пароль не задан' });
+      }
+
+      const valid = await verifyPassword(password, existing.passwordHash);
+      if (!valid) {
+        return res.status(401).json({ error: 'Неверный логин или пароль' });
+      }
+
+      return res.json(serializeUser(existing));
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Пароль минимум 6 символов' });
+    }
+
+    const pwHash = await hashPassword(password);
+    const user = await prisma.user.create({
+      data: {
+        platform: 'browser',
+        platformId: createBrowserPlatformId(),
+        login,
+        passwordHash: pwHash,
+        firstName: firstName || login,
+        lastName: lastName || null,
+        role: 'user',
+      },
+    });
+
+    res.json(serializeUser(user));
+  } catch (error: any) {
+    console.error('Browser auth error:', error);
+    res.status(500).json({ error: 'Ошибка входа' });
+  }
+});
+
 // Register new browser account (or set password for existing user)
 app.post('/api/auth/register', async (req, res) => {
   try {
@@ -287,7 +347,7 @@ app.post('/api/auth/register', async (req, res) => {
     const user = await prisma.user.create({
       data: {
         platform: 'browser',
-        platformId: BigInt(Date.now()), // unique ID for browser users
+        platformId: createBrowserPlatformId(),
         login,
         passwordHash: pwHash,
         firstName: firstName || login,
