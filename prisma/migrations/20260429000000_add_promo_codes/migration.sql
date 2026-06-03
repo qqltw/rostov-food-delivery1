@@ -1,6 +1,6 @@
 -- CreateTable
 CREATE TABLE IF NOT EXISTS "PromoCode" (
-  "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
+  "id" TEXT NOT NULL DEFAULT gen_random_uuid()::text,
   "code" TEXT NOT NULL,
   "discountType" TEXT NOT NULL,
   "value" DOUBLE PRECISION NOT NULL,

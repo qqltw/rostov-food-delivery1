@@ -1,6 +1,6 @@
 -- CreateTable
 CREATE TABLE IF NOT EXISTS "Notification" (
-  "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
+  "id" TEXT NOT NULL DEFAULT gen_random_uuid()::text,
   "title" TEXT NOT NULL,
   "message" TEXT NOT NULL,
   "isActive" BOOLEAN NOT NULL DEFAULT true,
