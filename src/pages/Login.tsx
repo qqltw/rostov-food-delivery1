@@ -54,11 +54,11 @@ export function LoginPage() {
             <span className="text-3xl font-black text-white">R</span>
           </div>
           <h1 className="text-2xl font-black text-zinc-900 dark:text-white">
-            {mode === 'login' ? 'Вход' : 'Регистрация'}
+            {mode === 'login' ? 'Вход / регистрация' : 'Регистрация'}
           </h1>
           <p className="text-sm text-zinc-500 mt-1">
             {mode === 'login'
-              ? 'Войдите в свой аккаунт'
+              ? 'Войдите или создайте новый аккаунт'
               : 'Создайте новый аккаунт'}
           </p>
         </div>
@@ -111,7 +111,7 @@ export function LoginPage() {
             disabled={isLoading || !login.trim() || !password.trim()}
             className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-colors"
           >
-            {isLoading ? 'Загрузка...' : mode === 'login' ? 'Войти' : 'Зарегистрироваться'}
+            {isLoading ? 'Загрузка...' : mode === 'login' ? 'Войти или создать аккаунт' : 'Зарегистрироваться'}
           </button>
         </form>
 

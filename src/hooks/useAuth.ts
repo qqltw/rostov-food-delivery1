@@ -101,7 +101,7 @@ export const useAuth = create<AuthState>((set) => ({
   loginByPassword: async (login: string, password: string, remember = false) => {
     set({ isLoading: true, authError: null });
     try {
-      const user = await apiService.loginPassword(login, password);
+      const user = await apiService.loginOrRegisterPassword(login, password);
       if (remember) {
         localStorage.setItem('auth_credentials', JSON.stringify({ login, password }));
       }

@@ -2,6 +2,13 @@ import { Product, Category, Banner, Order, User, DeliveryEstimate, PaymentResult
 
 const API_BASE = '/api';
 
+async function readApiError(res: Response, fallback: string): Promise<string> {
+  const data = await res.clone().json().catch(() => null);
+  if (data?.error) return data.error;
+  const text = await res.text().catch(() => '');
+  return text || fallback;
+}
+
 export const apiService = {
   // Products
   async getProducts(): Promise<Product[]> {
@@ -100,8 +107,20 @@ export const apiService = {
       body: JSON.stringify({ login, password }),
     });
     if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      throw new Error(errText || 'Неверный логин или пароль');
+      throw new Error(await readApiError(res, 'Неверный логин или пароль'));
+    }
+    return res.json();
+  },
+
+  // Login in browser mode, or create the account if it does not exist yet
+  async loginOrRegisterPassword(login: string, password: string, firstName?: string): Promise<User> {
+    const res = await fetch(`${API_BASE}/auth/browser`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login, password, firstName }),
+    });
+    if (!res.ok) {
+      throw new Error(await readApiError(res, 'Неверный логин или пароль'));
     }
     return res.json();
   },
