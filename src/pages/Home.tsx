@@ -8,14 +8,17 @@ import { motion } from 'motion/react';
 import { formatPrice } from '../lib/utils';
 import { Product, Notification as AppNotification } from '../types';
 import { apiService } from '../services/apiService';
+import { CatalogCollectionFilter } from './Catalog';
 
 const COMPANY_LOGO_SRC = '/company-logo.png';
+const CORPORATE_PHONE_HREF = 'tel:+79034308010';
 
 interface HomePageProps {
   onSelectCategory?: (categoryId: string) => void;
+  onSelectCollection?: (collection: CatalogCollectionFilter) => void;
 }
 
-export const HomePage: React.FC<HomePageProps> = ({ onSelectCategory }) => {
+export const HomePage: React.FC<HomePageProps> = ({ onSelectCategory, onSelectCollection }) => {
   const { user, setUser } = useAuth();
   const { products, categories, banners, isLoading } = useProducts();
   const [selectedProduct, setSelectedProduct] = React.useState<Product | null>(null);
@@ -51,6 +54,11 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCategory }) => {
 
   const popularProducts = products.filter(p => p.isPopular);
   const newProducts = products.filter(p => p.isNew);
+
+  const handleCorporatePhoneClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    window.location.assign(CORPORATE_PHONE_HREF);
+  };
 
   if (isLoading) {
     return (
@@ -106,8 +114,11 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCategory }) => {
           По организации корпоративного питания обращайтесь по номеру телефона
         </p>
         <a
-          href="tel:+79034308010"
+          href={CORPORATE_PHONE_HREF}
+          target="_self"
+          onClick={handleCorporatePhoneClick}
           className="mt-3 inline-flex items-center gap-2 text-lg font-black text-orange-500 hover:text-orange-600 transition-colors"
+          aria-label="Позвонить по номеру +7 903 430-80-10"
         >
           <PhoneCall size={18} />
           +7 (903) 430-80-10
@@ -159,7 +170,13 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCategory }) => {
       <section className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-100">Популярное</h2>
-          <button className="text-orange-500 text-xs font-bold uppercase tracking-widest">Все</button>
+          <button
+            type="button"
+            onClick={() => onSelectCollection?.('popular')}
+            className="text-orange-500 text-xs font-bold uppercase tracking-widest"
+          >
+            Все
+          </button>
         </div>
         <div className="grid grid-cols-2 gap-4">
           {popularProducts.map(product => (
@@ -178,7 +195,13 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCategory }) => {
       <section className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-100">Новинки</h2>
-          <button className="text-orange-500 text-xs font-bold uppercase tracking-widest">Все</button>
+          <button
+            type="button"
+            onClick={() => onSelectCollection?.('new')}
+            className="text-orange-500 text-xs font-bold uppercase tracking-widest"
+          >
+            Все
+          </button>
         </div>
         <div className="grid grid-cols-2 gap-4">
           {newProducts.map(product => (

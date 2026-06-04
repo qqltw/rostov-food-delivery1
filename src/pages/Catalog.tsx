@@ -8,20 +8,25 @@ import { useAuth } from '../hooks/useAuth';
 import { apiService } from '../services/apiService';
 import { Product } from '../types';
 
+export type CatalogCollectionFilter = 'popular' | 'new';
+
 interface CatalogPageProps {
   initialCategoryId?: string | null;
+  initialCollection?: CatalogCollectionFilter | null;
 }
 
-export const CatalogPage: React.FC<CatalogPageProps> = ({ initialCategoryId = null }) => {
+export const CatalogPage: React.FC<CatalogPageProps> = ({ initialCategoryId = null, initialCollection = null }) => {
   const { products, categories, isLoading, dbStatus } = useProducts();
   const { user, setUser } = useAuth();
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [selectedCollection, setSelectedCollection] = useState<CatalogCollectionFilter | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   React.useEffect(() => {
     setSelectedCategoryId(initialCategoryId);
-  }, [initialCategoryId]);
+    setSelectedCollection(initialCollection);
+  }, [initialCategoryId, initialCollection]);
 
   const handleToggleFavorite = async (productId: string) => {
     if (!user) return;
@@ -36,12 +41,17 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ initialCategoryId = nu
   const filteredProducts = useMemo(() => {
     // ... same as before
     const query = searchQuery.toLowerCase().trim();
-    if (!query && !selectedCategoryId) return products;
+    if (!query && !selectedCategoryId && !selectedCollection) return products;
 
     return products.filter(product => {
       const matchesCategory = selectedCategoryId ? product.categoryId === selectedCategoryId : true;
+      const matchesCollection = selectedCollection === 'popular'
+        ? product.isPopular
+        : selectedCollection === 'new'
+          ? product.isNew
+          : true;
       
-      if (!query) return matchesCategory;
+      if (!query) return matchesCategory && matchesCollection;
 
       const words = query.split(/\s+/);
       const targetText = `${product.name} ${product.description} ${product.tags.join(' ')}`.toLowerCase();
@@ -57,9 +67,17 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ initialCategoryId = nu
         return false;
       });
 
-      return matchesCategory && matchesSearch;
+      return matchesCategory && matchesCollection && matchesSearch;
     });
-  }, [products, selectedCategoryId, searchQuery]);
+  }, [products, selectedCategoryId, selectedCollection, searchQuery]);
+
+  const listTitle = selectedCategoryId
+    ? categories.find(c => c.id === selectedCategoryId)?.name
+    : selectedCollection === 'popular'
+      ? 'Популярное'
+      : selectedCollection === 'new'
+        ? 'Новинки'
+        : 'Все блюда';
 
   if (isLoading) {
     return <div className="animate-pulse space-y-4">
@@ -104,10 +122,13 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ initialCategoryId = nu
       {/* Categories Grid */}
       <div className="grid grid-cols-2 gap-3">
         <button
-          onClick={() => setSelectedCategoryId(null)}
+          onClick={() => {
+            setSelectedCategoryId(null);
+            setSelectedCollection(null);
+          }}
           className={cn(
             "p-4 rounded-3xl border transition-all flex items-center justify-between",
-            !selectedCategoryId 
+            !selectedCategoryId && !selectedCollection
               ? "bg-orange-500 border-orange-500 text-white shadow-lg shadow-orange-500/20" 
               : "bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100"
           )}
@@ -118,7 +139,10 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ initialCategoryId = nu
         {categories.map(category => (
           <button
             key={category.id}
-            onClick={() => setSelectedCategoryId(category.id)}
+            onClick={() => {
+              setSelectedCategoryId(category.id);
+              setSelectedCollection(null);
+            }}
             className={cn(
               "p-4 rounded-3xl border transition-all flex items-center justify-between",
               selectedCategoryId === category.id
@@ -136,7 +160,7 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ initialCategoryId = nu
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">
-            {selectedCategoryId ? categories.find(c => c.id === selectedCategoryId)?.name : 'Все блюда'}
+            {listTitle}
           </h2>
           <span className="text-xs text-zinc-400 font-bold uppercase tracking-widest">
             {filteredProducts.length} позиций
