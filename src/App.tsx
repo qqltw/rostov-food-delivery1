@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { Layout } from './components/Layout';
 import { HomePage } from './pages/Home';
-import { CatalogPage } from './pages/Catalog';
+import { CatalogCollectionFilter, CatalogPage } from './pages/Catalog';
 import { CartPage } from './pages/Cart';
 import { ProfilePage } from './pages/Profile';
 import { AdminPage } from './pages/Admin';
@@ -21,6 +21,7 @@ export default function App() {
   ));
   const [activeTab, setActiveTab] = useState(activeLegalDocument ? 'profile' : 'home');
   const [catalogCategoryId, setCatalogCategoryId] = useState<string | null>(null);
+  const [catalogCollection, setCatalogCollection] = useState<CatalogCollectionFilter | null>(null);
 
   useEffect(() => {
     // Apply saved theme on startup
@@ -115,8 +116,21 @@ export default function App() {
     }
 
     switch (activeTab) {
-      case 'home': return <HomePage onSelectCategory={(categoryId) => { setCatalogCategoryId(categoryId); navigateToTab('catalog'); }} />;
-      case 'catalog': return <CatalogPage initialCategoryId={catalogCategoryId} />;
+      case 'home': return (
+        <HomePage
+          onSelectCategory={(categoryId) => {
+            setCatalogCategoryId(categoryId);
+            setCatalogCollection(null);
+            navigateToTab('catalog');
+          }}
+          onSelectCollection={(collection) => {
+            setCatalogCategoryId(null);
+            setCatalogCollection(collection);
+            navigateToTab('catalog');
+          }}
+        />
+      );
+      case 'catalog': return <CatalogPage initialCategoryId={catalogCategoryId} initialCollection={catalogCollection} />;
       case 'cart': return <CartPage />;
       case 'profile': return <ProfilePage onOpenLegal={openLegalDocument} />;
       case 'admin': return <AdminPage />;
